@@ -58,3 +58,14 @@ CREATE TABLE IF NOT EXISTS templates (
 
 INSERT OR IGNORE INTO sessions (id, name, template_id, status, created_at)
 VALUES ('default', 'default', 'face-runner', 'active', strftime('%s','now'));
+
+CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL DEFAULT 'default',
+    event_type TEXT NOT NULL,
+    event_data TEXT,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
+CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at DESC);

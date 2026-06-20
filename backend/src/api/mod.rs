@@ -283,6 +283,37 @@ pub async fn list_templates(State(state): State<Arc<AppState>>) -> Result<Json<V
     Ok(Json(templates))
 }
 
+#[derive(Serialize)]
+pub struct EventRow {
+    id: String,
+    session_id: String,
+    event_type: String,
+    event_data: Option<serde_json::Value>,
+    created_at: i64,
+}
+
+pub async fn list_events(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<EventQuery>,
+) -> Result<Json<Vec<EventRow>>, StatusCode> {
+    let session = q.session.unwrap_or_else(|| "default".into());
+    let rows: Vec<(String, String, String, Option<String>, i64)> = sqlx::query_as(
+        "SELECT id, session_id, event_type, event_data, created_at FROM events WHERE session_id = ? ORDER BY created_at ASC LIMIT 500"
+    ).bind(&session).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let events: Vec<EventRow> = rows.into_iter().map(|(id, session_id, event_type, event_data, created_at)| {
+        let parsed_data = event_data.and_then(|d| serde_json::from_str(&d).ok());
+        EventRow { id, session_id, event_type, event_data: parsed_data, created_at }
+    }).collect();
+
+    Ok(Json(events))
+}
+
+#[derive(Deserialize)]
+pub struct EventQuery {
+    session: Option<String>,
+}
+
 pub async fn list_sessions(State(state): State<Arc<AppState>>) -> Result<Json<Vec<SessionInfo>>, StatusCode> {
     let rows: Vec<(String, String, String, String, i64)> = sqlx::query_as(
         "SELECT id, name, template_id, status, created_at FROM sessions ORDER BY created_at DESC"

@@ -40,6 +40,14 @@ pub async fn serve_template(
     State(state): State<Arc<AppState>>,
     Path(template_id): Path<String>,
 ) -> Result<Response, StatusCode> {
+    // Check cache first
+    if let Some(cached) = state.get_cached_template(&template_id).await {
+        let mut resp = Response::new(cached.into());
+        resp.headers_mut().insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
+        resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
+        return Ok(resp);
+    }
+
     let row: Option<(String,)> = sqlx::query_as("SELECT file_path FROM templates WHERE id = ?")
         .bind(&template_id)
         .fetch_optional(&state.pool).await
@@ -59,21 +67,22 @@ pub async fn serve_template(
 
     let html = std::fs::read_to_string(&file_path).map_err(|_| StatusCode::NOT_FOUND)?;
 
-    // Get the tunnel link from env or use relative path
     let tunnel_link = std::env::var("TUNNEL_LINK").unwrap_or_default();
 
-    // Replace placeholder with actual API base URL
     let api_base = if tunnel_link.is_empty() {
         "/api".to_string()
     } else {
         format!("{}/api", tunnel_link)
     };
 
-    let html = html
+    let processed = html
         .replace("API_BASE_URL", &api_base)
         .replace("forwarding_link", &tunnel_link);
 
-    let mut resp = Response::new(html.into());
+    // Cache for future requests
+    state.cache_template(&template_id, processed.clone()).await;
+
+    let mut resp = Response::new(processed.into());
     resp.headers_mut().insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
     resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
     Ok(resp)

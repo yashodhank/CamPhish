@@ -5,12 +5,14 @@ import Locations from './pages/Locations'
 import IpLogs from './pages/IpLogs'
 import Templates from './pages/Templates'
 import Sessions from './pages/Sessions'
+import SessionReplay from './pages/SessionReplay'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '📊' },
   { to: '/captures', label: 'Captures', icon: '📷' },
   { to: '/locations', label: 'Locations', icon: '📍' },
   { to: '/ips', label: 'IP Logs', icon: '🌐' },
+  { to: '/replay', label: 'Session Replay', icon: '⚡' },
   { to: '/templates', label: 'Templates', icon: '🎭' },
   { to: '/sessions', label: 'Sessions', icon: '🗂️' },
 ]
@@ -49,6 +51,7 @@ export default function App() {
           <Route path="/ips" element={<IpLogs />} />
           <Route path="/templates" element={<Templates />} />
           <Route path="/sessions" element={<Sessions />} />
+          <Route path="/replay" element={<SessionReplay />} />
         </Routes>
       </main>
     </div>

