@@ -180,7 +180,10 @@ async fn main() -> anyhow::Result<()> {
 
     let graceful = std::env::var("GRACEFUL_SHUTDOWN").map(|v| v != "false").unwrap_or(true);
     if graceful {
-        let shutdown = async { tracing::info!("Graceful shutdown..."); };
+        let shutdown = async {
+            tokio::signal::ctrl_c().await.expect("install ctrl-c handler");
+            tracing::info!("Graceful shutdown signal received, draining connections...");
+        };
         axum::serve(listener, app).with_graceful_shutdown(shutdown).await?;
     } else {
         axum::serve(listener, app).await?;

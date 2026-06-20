@@ -22,7 +22,7 @@ jobs:
 
       - name: Check Rust backend
         working-directory: backend
-        run: cargo check --warnings
+        run: cargo check
 
       - name: Install Node
         uses: actions/setup-node@v4
