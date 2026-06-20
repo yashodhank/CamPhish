@@ -1,0 +1,23 @@
+{
+    {$DOMAIN} {
+        tls {$LETSENCRYPT_EMAIL}
+    }
+
+    {$SUBDOMAIN}.{$DOMAIN} {
+        reverse_proxy camphish-app-self-hosted:80
+        header {
+            X-Frame-Options "SAMEORIGIN"
+            X-Content-Type-Options "nosniff"
+            -Server
+        }
+    }
+
+    dashboard.{$SUBDOMAIN}.{$DOMAIN} {
+        reverse_proxy camphish-dashboard-self-hosted:80
+        header {
+            X-Frame-Options "SAMEORIGIN"
+            X-Content-Type-Options "nosniff"
+            -Server
+        }
+    }
+}
