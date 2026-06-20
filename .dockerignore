@@ -1,0 +1,17 @@
+.git
+.gitignore
+*.md
+LICENSE
+*.png
+*.jpg
+*.log
+*.txt
+*.bak
+saved_locations/
+camphish.sh
+cleanup.sh
+docker-compose.yml
+.env
+.env.example
+Makefile
+data/
