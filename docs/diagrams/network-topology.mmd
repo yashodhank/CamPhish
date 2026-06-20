@@ -1,32 +1,36 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3b82f6','primaryTextColor': '#ffffff','primaryBorderColor': '#2563eb','lineColor': '#6b7280','secondaryColor': '#f59e0b','tertiaryColor': '#10b981','noteBkgColor': '#f3f4f6','noteTextColor': '#1f2937','fontSize': '13px'}}}%%
 flowchart TD
-  subgraph "Internet"
-    TARGET["Target Device\nBrowser with Camera"]
-    CF_EDGE["Cloudflare Edge\n(if orange cloud ON)"]
+  subgraph INTERNET["🌍 Internet"]
+    direction LR
+    TARGET["🎯 Target Device\nBrowser with Camera"]
+    CF_EDGE["🛡 Cloudflare Edge\nOrange Cloud Proxy"]
   end
 
-  subgraph "VPS / Host Machine"
-    subgraph "Docker Network: camphish-net (Bridge)"
-      PROXY["Reverse Proxy\nCaddy / Traefik / Nginx\n:80, :443"]
-      APP["camphish-app\nApache :80\n127.0.0.1:3333→:80"]
-      DASH["camphish-dashboard\nApache :80\n127.0.0.1:8080→:80"]
-      TUNNEL["Tunnel Container\nngrok / cloudflared"]
+  subgraph VPS["🖥 VPS / Host Machine"]
+    subgraph DOCKER_NET["Docker Bridge Network — camphish-net"]
+      direction LR
+      PROXY["🔀 Reverse Proxy\nCaddy / Traefik / Nginx\n:80 :443"]
+      APP["📱 camphish-app\nApache :80\n127.0.0.1:3333→:80"]
+      DASH["📊 camphish-dashboard\nApache :80\n127.0.0.1:8080→:80"]
+      TUNNEL["🔗 Tunnel Container\nngrok / cloudflared"]
     end
-    DOCKER["Docker Engine\nContainer Runtime"]
-    VOLUMES["Bind Mounts\n./data/captures\n./data/locations\n./data/logs\n./data/config"]
+    DOCKER["🐳 Docker Engine\nContainer Runtime"]
+    VOLUMES["💾 Bind Mounts\n./data/captures\n./data/locations\n./data/logs\n./data/config"]
   end
 
-  subgraph "Cloudflare"
+  subgraph CF["☁ Cloudflare"]
+    direction LR
     CF_API["Cloudflare API\nDNS Management"]
     CF_DNS["Authoritative DNS\nA Records"]
   end
 
-  subgraph "Operator Network"
+  subgraph OPS["👤 Operator Network"]
     OPERATOR["Operator\nCLI + Browser"]
   end
 
   TARGET -->|"HTTPS :443"| CF_EDGE
   CF_EDGE -->|"HTTPS :443"| PROXY
-  TARGET -.->|"Direct (no CF proxy)"| PROXY
+  TARGET -.->|"Direct — no CF proxy"| PROXY
   PROXY -->|"HTTP :80"| APP
   PROXY -->|"HTTP :80"| DASH
   TUNNEL -->|"HTTP :80"| APP
@@ -38,3 +42,9 @@ flowchart TD
   OPERATOR -->|"HTTPS :3333"| APP
   CF_API --> CF_DNS
   CF_DNS -->|"Resolves to"| PROXY
+
+  style INTERNET fill:#eff6ff,stroke:#3b82f6,color:#1e3a5f
+  style VPS fill:#fef3c7,stroke:#f59e0b,color:#78350f
+  style DOCKER_NET fill:#fef9c3,stroke:#eab308,color:#713f12
+  style CF fill:#ecfdf5,stroke:#10b981,color:#064e3b
+  style OPS fill:#faf5ff,stroke:#8b5cf6,color:#3b0764

@@ -1,52 +1,63 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3b82f6','primaryTextColor': '#ffffff','primaryBorderColor': '#2563eb','lineColor': '#6b7280','secondaryColor': '#f59e0b','tertiaryColor': '#10b981','noteBkgColor': '#f3f4f6','noteTextColor': '#1f2937','actorBkg': '#dbeafe','actorBorder': '#3b82f6','actorTextColor': '#1e3a5f','signalColor': '#6b7280','signalTextColor': '#1f2937','labelBoxBkgColor': '#fef3c7','labelBoxBorderColor': '#f59e0b','labelTextColor': '#78350f','loopTextColor': '#1f2937','activationBkgColor': '#dbeafe','activationBorderColor': '#3b82f6','fontSize': '13px'}}}%%
 sequenceDiagram
-  actor T as Target
-  participant B as Browser (JS)
-  participant L as Landing Page (index.php)
-  participant IP as ip.php
-  participant GL as Geolocation API
-  participant LOC as location.php
-  participant CAM as Camera API
-  participant POST as post.php
-  participant FS as File System (/data/)
+  actor T as 🎯 Target
+  participant B as 🌐 Browser JS
+  participant L as 📄 index.php
+  participant IP as 📋 ip.php
+  participant GL as 📍 Geolocation API
+  participant LOC as 💾 location.php
+  participant CAM as 📷 Camera API
+  participant POST as 🖼 post.php
+  participant FS as 💿 /data/ Filesystem
 
-  Note over T,FS: Phase 1: Target opens phishing link
-  T->>B: Clicks phishing URL
-  B->>L: GET /index.php
-  L->>IP: include 'ip.php'
-  IP->>FS: Write IP + User-Agent to /data/logs/ip.txt
-  L-->>B: HTML + JS (loading spinner)
-
-  Note over T,FS: Phase 2: Location capture (parallel)
-  B->>GL: navigator.geolocation.getCurrentPosition()
-  alt Permission Granted
-    GL-->>B: {lat, lon, accuracy}
-    B->>LOC: POST lat, lon, acc
-    LOC->>FS: Write /data/locations/location_*.txt
-    LOC->>FS: Write /data/locations/current_location.txt
-    LOC->>FS: Append /data/locations/saved.locations.txt
-    LOC-->>B: 200 OK {status: success}
-  else Permission Denied / Error
-    GL-->>B: Error
-    B->>B: handleError() → redirect after 2s
+  rect rgb(239, 246, 255)
+    Note over T,FS: 🔹 Phase 1 — Target opens phishing link
+    T->>B: Clicks phishing URL
+    B->>L: GET /index.php
+    L->>IP: include 'ip.php'
+    IP->>FS: Write IP + User-Agent → /data/logs/ip.txt
+    L-->>B: HTML + JS (loading spinner)
   end
 
-  Note over T,FS: Phase 3: Redirect to template
-  B->>L: window.location = forwarding_link/index2.html
-  L-->>B: Template page (Festival / YouTube / Meeting)
-
-  Note over T,FS: Phase 4: Camera capture (triggered by template JS)
-  B->>CAM: navigator.mediaDevices.getUserMedia({video: true})
-  alt Permission Granted
-    CAM-->>B: MediaStream
-    B->>B: canvas.toDataURL('image/png')
-    B->>POST: POST cat=<base64 image>
-    POST->>POST: base64_decode()
-    POST->>FS: Write /data/captures/cam*.png
-    POST-->>B: 200 OK
-  else Permission Denied
-    CAM-->>B: NotAllowedError
-    B->>B: Silent fail (template continues)
+  rect rgb(254, 243, 199)
+    Note over T,FS: 🔹 Phase 2 — Location capture
+    B->>GL: navigator.geolocation.getCurrentPosition()
+    alt ✅ Permission Granted
+      GL-->>B: {lat, lon, accuracy}
+      B->>LOC: POST lat, lon, acc
+      LOC->>FS: Write /data/locations/location_*.txt
+      LOC->>FS: Write /data/locations/current_location.txt
+      LOC->>FS: Append /data/locations/saved.locations.txt
+      LOC-->>B: 200 OK {status: success}
+    else ❌ Permission Denied / Error
+      GL-->>B: Error
+      B->>B: handleError() → redirect after 2s
+    end
   end
 
-  Note over T,FS: Phase 5: Operator views results
-  B->>B: Template page continues to display
+  rect rgb(236, 253, 245)
+    Note over T,FS: 🔹 Phase 3 — Redirect to template
+    B->>L: window.location = forwarding_link/index2.html
+    L-->>B: Template page (Festival / YouTube / Meeting)
+  end
+
+  rect rgb(250, 245, 255)
+    Note over T,FS: 🔹 Phase 4 — Camera capture
+    B->>CAM: navigator.mediaDevices.getUserMedia({video: true})
+    alt ✅ Permission Granted
+      CAM-->>B: MediaStream
+      B->>B: canvas.toDataURL('image/png')
+      B->>POST: POST cat=base64_image_data
+      POST->>POST: base64_decode()
+      POST->>FS: Write /data/captures/cam*.png
+      POST-->>B: 200 OK
+    else ❌ Permission Denied
+      CAM-->>B: NotAllowedError
+      B->>B: Silent fail — template continues
+    end
+  end
+
+  rect rgb(254, 242, 242)
+    Note over T,FS: 🔹 Phase 5 — Operator views results
+    B->>B: Template page continues to display
+  end

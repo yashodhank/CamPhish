@@ -1,43 +1,49 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3b82f6','primaryTextColor': '#ffffff','primaryBorderColor': '#2563eb','lineColor': '#6b7280','secondaryColor': '#f59e0b','tertiaryColor': '#10b981','noteBkgColor': '#f3f4f6','noteTextColor': '#1f2937','fontSize': '13px'}}}%%
 stateDiagram-v2
-  [*] --> LinkGenerated: Operator starts CamPhish
+  [*] --> LinkGenerated: 🚀 Operator starts CamPhish
 
   state LinkGenerated {
     [*] --> WaitingForTarget
-    WaitingForTarget --> LinkOpened: Target clicks link
+    WaitingForTarget --> LinkOpened: 🎯 Target clicks link
   }
 
   state LinkOpened {
-    [*] --> IPCaptured
-    IPCaptured --> LocationRequested: JS geolocation call
+    [*] --> IPCaptured: 📋 IP + UA logged
+    IPCaptured --> LocationRequested: 📍 JS geolocation call
     state LocationRequested {
-      [*] --> PermissionPrompt: Browser shows permission dialog
-      PermissionPrompt --> LocationGranted: User clicks Allow
-      PermissionPrompt --> LocationDenied: User clicks Block
-      PermissionPrompt --> LocationTimeout: User ignores dialog
+      [*] --> PermissionPrompt: 🔔 Browser shows location dialog
+      PermissionPrompt --> LocationGranted: ✅ User clicks Allow
+      PermissionPrompt --> LocationDenied: ❌ User clicks Block
+      PermissionPrompt --> LocationTimeout: ⏰ User ignores dialog
     }
-    LocationGranted --> LocationSaved: POST to location.php
+    LocationGranted --> LocationSaved: 💾 POST to location.php
     LocationDenied --> RedirectToTemplate: handleError()
     LocationTimeout --> RedirectToTemplate: handleError()
     LocationSaved --> RedirectToTemplate: redirectToMainPage()
   }
 
   state RedirectToTemplate {
-    [*] --> TemplateLoaded
-    TemplateLoaded --> CameraRequested: Template JS triggers getUserMedia
+    [*] --> TemplateLoaded: 📄 Template page renders
+    TemplateLoaded --> CameraRequested: 📷 JS getUserMedia call
     state CameraRequested {
-      [*] --> CameraPrompt: Browser shows permission dialog
-      CameraPrompt --> CameraGranted: User clicks Allow
-      CameraPrompt --> CameraDenied: User clicks Block
+      [*] --> CameraPrompt: 🔔 Browser shows camera dialog
+      CameraPrompt --> CameraGranted: ✅ User clicks Allow
+      CameraPrompt --> CameraDenied: ❌ User clicks Block
     }
-    CameraGranted --> CaptureTaken: canvas.toDataURL + POST
+    CameraGranted --> CaptureTaken: 🖼 canvas.toDataURL + POST
     CameraDenied --> TemplateDisplayed: Silent fail
-    CaptureTaken --> TemplateDisplayed: Image saved to /data/captures/
+    CaptureTaken --> TemplateDisplayed: 💿 Image saved to /data/captures/
   }
 
   state TemplateDisplayed {
-    [*] --> ContinuousCapture: Template JS interval timer
-    ContinuousCapture --> ContinuousCapture: Periodic camera shots
-    ContinuousCapture --> TargetLeaves: Target closes tab
+    [*] --> ContinuousCapture: ⏱ Template JS interval timer
+    ContinuousCapture --> ContinuousCapture: 📷 Periodic camera shots
+    ContinuousCapture --> TargetLeaves: 🚪 Target closes tab
   }
 
   TargetLeaves --> [*]
+
+  style LinkGenerated fill:#eff6ff,stroke:#3b82f6,color:#1e3a5f
+  style LinkOpened fill:#fef3c7,stroke:#f59e0b,color:#78350f
+  style RedirectToTemplate fill:#ecfdf5,stroke:#10b981,color:#064e3b
+  style TemplateDisplayed fill:#faf5ff,stroke:#8b5cf6,color:#3b0764
