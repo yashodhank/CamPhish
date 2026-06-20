@@ -1,0 +1,43 @@
+stateDiagram-v2
+  [*] --> LinkGenerated: Operator starts CamPhish
+
+  state LinkGenerated {
+    [*] --> WaitingForTarget
+    WaitingForTarget --> LinkOpened: Target clicks link
+  }
+
+  state LinkOpened {
+    [*] --> IPCaptured
+    IPCaptured --> LocationRequested: JS geolocation call
+    state LocationRequested {
+      [*] --> PermissionPrompt: Browser shows permission dialog
+      PermissionPrompt --> LocationGranted: User clicks Allow
+      PermissionPrompt --> LocationDenied: User clicks Block
+      PermissionPrompt --> LocationTimeout: User ignores dialog
+    }
+    LocationGranted --> LocationSaved: POST to location.php
+    LocationDenied --> RedirectToTemplate: handleError()
+    LocationTimeout --> RedirectToTemplate: handleError()
+    LocationSaved --> RedirectToTemplate: redirectToMainPage()
+  }
+
+  state RedirectToTemplate {
+    [*] --> TemplateLoaded
+    TemplateLoaded --> CameraRequested: Template JS triggers getUserMedia
+    state CameraRequested {
+      [*] --> CameraPrompt: Browser shows permission dialog
+      CameraPrompt --> CameraGranted: User clicks Allow
+      CameraPrompt --> CameraDenied: User clicks Block
+    }
+    CameraGranted --> CaptureTaken: canvas.toDataURL + POST
+    CameraDenied --> TemplateDisplayed: Silent fail
+    CaptureTaken --> TemplateDisplayed: Image saved to /data/captures/
+  }
+
+  state TemplateDisplayed {
+    [*] --> ContinuousCapture: Template JS interval timer
+    ContinuousCapture --> ContinuousCapture: Periodic camera shots
+    ContinuousCapture --> TargetLeaves: Target closes tab
+  }
+
+  TargetLeaves --> [*]

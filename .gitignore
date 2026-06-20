@@ -2,6 +2,7 @@
 data/
 *.log
 *.png
+!docs/diagrams/*.png
 *.txt
 *.bak
 saved_locations/

@@ -1,0 +1,40 @@
+flowchart TD
+  subgraph "Internet"
+    TARGET["Target Device\nBrowser with Camera"]
+    CF_EDGE["Cloudflare Edge\n(if orange cloud ON)"]
+  end
+
+  subgraph "VPS / Host Machine"
+    subgraph "Docker Network: camphish-net (Bridge)"
+      PROXY["Reverse Proxy\nCaddy / Traefik / Nginx\n:80, :443"]
+      APP["camphish-app\nApache :80\n127.0.0.1:3333→:80"]
+      DASH["camphish-dashboard\nApache :80\n127.0.0.1:8080→:80"]
+      TUNNEL["Tunnel Container\nngrok / cloudflared"]
+    end
+    DOCKER["Docker Engine\nContainer Runtime"]
+    VOLUMES["Bind Mounts\n./data/captures\n./data/locations\n./data/logs\n./data/config"]
+  end
+
+  subgraph "Cloudflare"
+    CF_API["Cloudflare API\nDNS Management"]
+    CF_DNS["Authoritative DNS\nA Records"]
+  end
+
+  subgraph "Operator Network"
+    OPERATOR["Operator\nCLI + Browser"]
+  end
+
+  TARGET -->|"HTTPS :443"| CF_EDGE
+  CF_EDGE -->|"HTTPS :443"| PROXY
+  TARGET -.->|"Direct (no CF proxy)"| PROXY
+  PROXY -->|"HTTP :80"| APP
+  PROXY -->|"HTTP :80"| DASH
+  TUNNEL -->|"HTTP :80"| APP
+  TARGET -->|"HTTPS tunnel URL"| TUNNEL
+  APP --> VOLUMES
+  DASH --> VOLUMES
+  OPERATOR -->|"SSH / CLI"| DOCKER
+  OPERATOR -->|"HTTPS :8080"| DASH
+  OPERATOR -->|"HTTPS :3333"| APP
+  CF_API --> CF_DNS
+  CF_DNS -->|"Resolves to"| PROXY

@@ -1,0 +1,57 @@
+mindmap
+  root((CamPhish v3.0))
+    Deployment Modes
+      Local
+        ngrok tunnel
+        cloudflared tunnel
+        No tunnel (LAN)
+      Self-Hosted VPS
+        Caddy proxy
+        Traefik proxy
+        Nginx proxy
+        Cloudflare DNS
+      Coolify
+        Traefik labels
+        Auto-discovery
+    Build System
+      pack CLI
+        heroku/builder:24
+        OCI images
+        SBOM generation
+        Image rebase
+      Dockerfile
+        php:8.2-apache
+        Multi-stage
+    Application
+      PHP Backend
+        ip.php :: IP capture
+        location.php :: GPS capture
+        post.php :: Camera capture
+        debug_log.php :: Filtered logging
+        index.php :: Template selector
+        health.php :: Health check
+      Templates
+        Festival Wishing
+        Live YouTube TV
+        Online Meeting
+      Dashboard
+        Capture gallery
+        GPS viewer
+        IP log viewer
+        Session stats
+    Storage
+      /data/captures
+      /data/locations
+      /data/logs
+      /data/config
+    Security
+      Security headers
+      Bind-mounted volumes
+      Health checks
+      Input validation
+      File locking (LOCK_EX)
+    Operations
+      ./camphish CLI
+      Makefile targets
+      Docker Compose profiles
+      Cloudflare DNS scripts

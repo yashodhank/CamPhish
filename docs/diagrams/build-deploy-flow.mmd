@@ -1,0 +1,63 @@
+flowchart TD
+  subgraph "Input"
+    SOURCE["Source Code\napp/public/"]
+    ENV[".env Config"]
+    TOML["project.toml\nBuildpack Descriptor"]
+  end
+
+  subgraph "Build Path A: pack CLI"
+    PACK["pack build\n--builder heroku/builder:24"]
+    DETECT["DETECT Phase\nheroku/php buildpack\nheroku/procfile buildpack"]
+    BUILD["BUILD Phase\nInstall PHP 8.5\nInstall Apache 2.4\nInstall Composer\ncomposer install"]
+    EXPORT["EXPORT Phase\nOCI Image Layers\nSBOM Generation"]
+    REGISTRY[("Container Registry\nghcr.io / Docker Hub")]
+    LOCAL_IMAGE["Local Docker Image\ncamphish-app:latest"]
+  end
+
+  subgraph "Build Path B: Dockerfile"
+    DOCKERFILE["Dockerfile\nFROM php:8.2-apache"]
+    DOCKER_BUILD["docker compose build\napt-get install\nCOPY app files\nConfigure Apache"]
+    DOCKER_IMAGE["Local Docker Image\ncamphish-app:latest"]
+  end
+
+  subgraph "Deploy"
+    COMPOSE["docker compose\n--profile <mode> up -d"]
+    HEALTH["Health Check\ncurl /health.php"]
+    TUNNEL["Tunnel Start\nngrok / cloudflared"]
+    PROXY["Proxy Start\nCaddy / Traefik / Nginx"]
+    LINK["Phishing Link\nGenerated"]
+  end
+
+  subgraph "Runtime"
+    SERVE["Apache Serves\nPHP Application"]
+    MONITOR["Dashboard\nView Captures"]
+    PERSIST["Persistent Volumes\n/data/*"]
+  end
+
+  SOURCE --> PACK
+  SOURCE --> DOCKERFILE
+  ENV --> PACK
+  ENV --> DOCKER_BUILD
+  TOML --> PACK
+
+  PACK --> DETECT
+  DETECT --> BUILD
+  BUILD --> EXPORT
+  EXPORT -->|"--publish"| REGISTRY
+  EXPORT -->|"local"| LOCAL_IMAGE
+
+  DOCKERFILE --> DOCKER_BUILD
+  DOCKER_BUILD --> DOCKER_IMAGE
+
+  REGISTRY --> COMPOSE
+  LOCAL_IMAGE --> COMPOSE
+  DOCKER_IMAGE --> COMPOSE
+
+  COMPOSE --> HEALTH
+  HEALTH -->|"healthy"| TUNNEL
+  HEALTH -->|"healthy"| PROXY
+  TUNNEL --> LINK
+  PROXY --> LINK
+  LINK --> SERVE
+  SERVE --> MONITOR
+  SERVE --> PERSIST
