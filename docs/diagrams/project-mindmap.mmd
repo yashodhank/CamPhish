@@ -1,19 +1,20 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3b82f6','primaryTextColor': '#ffffff','primaryBorderColor': '#2563eb','lineColor': '#6b7280','secondaryColor': '#f59e0b','tertiaryColor': '#10b981','fontSize': '14px'}}}%%
 mindmap
   root((CamPhish v3.0))
-    Deployment Modes
-      Local
+    🚀 Deployment Modes
+      🖥 Local
         ngrok tunnel
         cloudflared tunnel
-        No tunnel (LAN)
-      Self-Hosted VPS
+        No tunnel :: LAN
+      ☁ Self-Hosted VPS
         Caddy proxy
         Traefik proxy
         Nginx proxy
         Cloudflare DNS
-      Coolify
+      📦 Coolify
         Traefik labels
         Auto-discovery
-    Build System
+    🔧 Build System
       pack CLI
         heroku/builder:24
         OCI images
@@ -22,7 +23,7 @@ mindmap
       Dockerfile
         php:8.2-apache
         Multi-stage
-    Application
+    📱 Application
       PHP Backend
         ip.php :: IP capture
         location.php :: GPS capture
@@ -30,27 +31,27 @@ mindmap
         debug_log.php :: Filtered logging
         index.php :: Template selector
         health.php :: Health check
-      Templates
+      🎭 Templates
         Festival Wishing
         Live YouTube TV
         Online Meeting
-      Dashboard
+      📊 Dashboard
         Capture gallery
         GPS viewer
         IP log viewer
         Session stats
-    Storage
+    💾 Storage
       /data/captures
       /data/locations
       /data/logs
       /data/config
-    Security
+    🛡 Security
       Security headers
       Bind-mounted volumes
       Health checks
       Input validation
-      File locking (LOCK_EX)
-    Operations
+      File locking :: LOCK_EX
+    ⚙ Operations
       ./camphish CLI
       Makefile targets
       Docker Compose profiles

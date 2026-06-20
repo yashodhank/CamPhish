@@ -1,39 +1,43 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3b82f6','primaryTextColor': '#ffffff','primaryBorderColor': '#2563eb','lineColor': '#6b7280','secondaryColor': '#f59e0b','tertiaryColor': '#10b981','fontSize': '13px'}}}%%
 flowchart TD
-  subgraph "Operator Actions"
-    O1["Configure .env"]
-    O2["Build Image\npack build / docker compose build"]
-    O3["Deploy\n./camphish up"]
-    O4["Get Phishing Link\n./camphish link"]
-    O5["Send Link to Target"]
-    O6["Monitor Dashboard\nhttp://localhost:8080"]
-    O7["View Captures\nImages + GPS + IP"]
-    O8["Stop Session\n./camphish down"]
-    O9["Clean Data\n./camphish clean"]
+  subgraph OPERATOR["👤 Operator Actions"]
+    direction TB
+    O1["⚙ Configure .env"]
+    O2["🔧 Build Image\npack build | docker compose build"]
+    O3["🚀 Deploy\n./camphish up"]
+    O4["🔗 Get Phishing Link\n./camphish link"]
+    O5["📨 Send Link to Target"]
+    O6["📊 Monitor Dashboard\nhttp://localhost:8080"]
+    O7["👁 View Captures\nImages + GPS + IP"]
+    O8["🛑 Stop Session\n./camphish down"]
+    O9["🧹 Clean Data\n./camphish clean"]
   end
 
-  subgraph "System Actions"
-    S1["Start Apache + PHP"]
-    S2["Start Tunnel\nngrok / cloudflared"]
-    S3["Start Proxy\nCaddy / Traefik / Nginx"]
-    S4["Generate Public URL"]
-    S5["Serve Landing Page\n(index.php)"]
-    S6["Log IP + User-Agent\n(ip.php)"]
-    S7["Request Geolocation\n(JS geolocation API)"]
-    S8["Save GPS Data\n(location.php)"]
-    S9["Redirect to Template\n(Festival/YouTube/Meeting)"]
-    S10["Request Camera\n(JS getUserMedia)"]
-    S11["Capture + Save Image\n(post.php)"]
-    S12["Update Dashboard\n(real-time)"]
-    S13["Stop Containers"]
+  subgraph SYSTEM["⚙ System Actions"]
+    direction TB
+    S1["🌐 Start Apache + PHP"]
+    S2["🔗 Start Tunnel\nngrok | cloudflared"]
+    S3["🔀 Start Proxy\nCaddy | Traefik | Nginx"]
+    S4["🔗 Generate Public URL"]
+    S5["📄 Serve Landing Page\nindex.php"]
+    S6["📋 Log IP + User-Agent\nip.php"]
+    S7["📍 Request Geolocation\nJS geolocation API"]
+    S8["💾 Save GPS Data\nlocation.php"]
+    S9["🎭 Redirect to Template\nFestival | YouTube | Meeting"]
+    S10["📷 Request Camera\nJS getUserMedia"]
+    S11["🖼 Capture + Save Image\npost.php"]
+    S12["📊 Update Dashboard\nreal-time"]
+    S13["🛑 Stop Containers"]
   end
 
-  subgraph "Target Actions"
-    T1["Click Phishing Link"]
-    T2["Browser Loads Page"]
-    T3["Allow Location Permission"]
-    T4["Allow Camera Permission"]
-    T5["View Template Content"]
-    T6["Close Tab / Leave"]
+  subgraph TARGET["🎯 Target Actions"]
+    direction TB
+    T1["👆 Click Phishing Link"]
+    T2["🌐 Browser Loads Page"]
+    T3["✅ Allow Location"]
+    T4["✅ Allow Camera"]
+    T5["👁 View Template Content"]
+    T6["🚪 Close Tab / Leave"]
   end
 
   O1 --> O2
@@ -53,14 +57,14 @@ flowchart TD
   T2 --> T3
   T3 --> S8
   S8 --> S9
-  T2 -->|"Deny"| S9
+  T2 -->|"❌ Deny"| S9
   S9 --> S10
   T2 --> T4
   T4 --> S11
-  T2 -->|"Deny"| T5
+  T2 -->|"❌ Deny"| T5
   S11 --> T5
   T5 --> S10
-  S10 -->|"Interval"| S11
+  S10 -->|"⏱ Interval"| S11
   S6 --> S12
   S8 --> S12
   S11 --> S12
@@ -70,3 +74,7 @@ flowchart TD
   T6 --> O8
   O8 --> S13
   S13 --> O9
+
+  style OPERATOR fill:#eff6ff,stroke:#3b82f6,color:#1e3a5f
+  style SYSTEM fill:#fef3c7,stroke:#f59e0b,color:#78350f
+  style TARGET fill:#ecfdf5,stroke:#10b981,color:#064e3b
