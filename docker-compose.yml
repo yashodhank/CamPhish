@@ -1,5 +1,31 @@
 services:
   # =========================================================================
+  # TrailBase — Data layer (REST CRUD, Realtime, Auth, Admin UI)
+  # =========================================================================
+  trailbase:
+    image: trailbase/trailbase:latest
+    container_name: camphish-trailbase
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      - ADDRESS=0.0.0.0:4000
+      - ADMIN_EMAIL=${TRAILBASE_ADMIN_EMAIL:-admin@camphish.local}
+      - ADMIN_PASSWORD=${TRAILBASE_ADMIN_PASSWORD:-changeme}
+    volumes:
+      - trailbase_data:/app/traildepot
+      - ./trailbase/schema:/schema:ro
+    entrypoint: ["/bin/sh", "-c", "mkdir -p /app/traildepot/migrations && cp /schema/*.sql /app/traildepot/migrations/ 2>/dev/null; exec /app/trail run"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/_/admin/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - camphish-net
+
+  # =========================================================================
   # CamPhish — Application server (template serving + capture + dashboard)
   # =========================================================================
   app:
@@ -22,6 +48,11 @@ services:
       - GRACEFUL_SHUTDOWN=true
       - ENABLE_COMPRESSION=true
       - ENABLE_TEMPLATE_CACHE=true
+      - TRAILBASE_URL=http://trailbase:4000
+      - TRAILBASE_API_KEY=${TRAILBASE_API_KEY:-}
+    depends_on:
+      trailbase:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
       interval: ${HEALTH_CHECK_INTERVAL:-30}s
@@ -68,6 +99,7 @@ services:
 
 volumes:
   camphish_data:
+  trailbase_data:
 
 networks:
   camphish-net:

