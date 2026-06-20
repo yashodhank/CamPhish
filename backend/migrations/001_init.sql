@@ -122,3 +122,11 @@ CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at DESC);
 
 INSERT OR IGNORE INTO sessions (id, name, template_id, status)
 VALUES ('default', 'default', 'face-runner', 'active');
+
+CREATE TABLE IF NOT EXISTS storage_dumps (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL DEFAULT 'default',
+    data TEXT,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_storage_session ON storage_dumps(session_id);

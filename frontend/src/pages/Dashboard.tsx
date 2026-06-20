@@ -3,10 +3,10 @@ import { api, Stats } from '../api/client'
 
 function StatCard({ label, value, sub, icon, color }: { label: string; value: string | number; sub?: string; icon: string; color: string }) {
   return (
-    <div className={`bg-gray-900 border border-gray-800 rounded-2xl p-5 relative overflow-hidden hover:border-${color}-500/40 transition-all hover:shadow-lg hover:shadow-${color}-500/5`}>
+    <div className={`bg-gray-900 border border-gray-800 rounded-2xl p-5 relative overflow-hidden transition-all transition-all hover:shadow-lg`}>
       <div className="absolute top-4 right-4 text-3xl opacity-15">{icon}</div>
       <div className="text-xs text-gray-500 uppercase tracking-wider font-medium">{label}</div>
-      <div className={`text-3xl font-bold mt-2 tabular-nums text-${color}-400`}>{value}</div>
+      <div className={`text-3xl font-bold mt-2 tabular-nums text-cyan-400`}>{value}</div>
       {sub && <div className="text-xs text-gray-600 mt-1">{sub}</div>}
     </div>
   )

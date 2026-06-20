@@ -180,7 +180,7 @@ pub async fn receive_fingerprint(
     let now = chrono::Utc::now().timestamp();
 
     sqlx::query(
-        "INSERT INTO ip_logs (id, session_id, ip_address, user_agent, device, browser, os, local_ip, screen_resolution, color_depth, timezone, language, platform, hardware_concurrency, device_memory, battery_level, battery_charging, canvas_fingerprint, webgl_fingerprint, font_list, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO ip_logs (id, session_id, ip_address, user_agent, device, browser, os, local_ip, screen_resolution, color_depth, pixel_ratio, timezone, timezone_offset, language, languages, platform, hardware_concurrency, device_memory, max_touch_points, battery_level, battery_charging, canvas_fingerprint, webgl_fingerprint, font_list, webgl_vendor, webgl_renderer, audio_sample_rate, font_count, gender_prediction, gender_confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(uuid::Uuid::new_v4().to_string()).bind(&session_id).bind(&ip).bind(&ua)
     .bind(&device).bind(&browser).bind(&os).bind(&payload.local_ip)
