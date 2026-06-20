@@ -1,0 +1,93 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3b82f6','primaryTextColor': '#ffffff','primaryBorderColor': '#2563eb','lineColor': '#6b7280','secondaryColor': '#f59e0b','tertiaryColor': '#10b981','noteBkgColor': '#f3f4f6','noteTextColor': '#1f2937','actorBkg': '#dbeafe','actorBorder': '#3b82f6','actorTextColor': '#1e3a5f','signalColor': '#6b7280','signalTextColor': '#1f2937','labelBoxBkgColor': '#fef3c7','labelBoxBorderColor': '#f59e0b','labelTextColor': '#78350f','loopTextColor': '#1f2937','activationBkgColor': '#dbeafe','activationBorderColor': '#3b82f6','fontSize': '13px'}}}%%
+sequenceDiagram
+  actor T as 🎯 Target User
+  participant MSG as 📨 Message App
+  participant B as 🌐 Browser
+  participant L as 📄 Landing Page
+  participant LOC as 📍 Location Prompt
+  participant TP as 🎭 Template Page
+  participant CAM as 📷 Camera Prompt
+  participant DASH as 📊 Operator Dashboard
+
+  rect rgb(239, 246, 255)
+    Note over T,MSG: 🔹 Step 1 — Target receives link
+    MSG-->>T: "Check out this Diwali greeting! 🪔"
+    T->>T: Reads message, sees link
+    T->>T: Decides to click — looks legitimate
+  end
+
+  rect rgb(254, 243, 199)
+    Note over T,L: 🔹 Step 2 — Landing page loads
+    T->>B: Taps phishing link
+    B->>L: HTTPS request to tunnel URL
+    L-->>B: Loading spinner + "Loading, please wait..."
+    B-->>T: 👁 Target sees: loading animation
+    Note right of T: ⏱ ~1 second
+  end
+
+  rect rgb(236, 253, 245)
+    Note over T,LOC: 🔹 Step 3 — Location permission prompt
+    L->>B: JS triggers navigator.geolocation
+    B-->>T: 🔔 Browser dialog appears
+    Note right of T: "This site wants to know
+    Note right of T: your location" [Allow] [Block]
+    alt ✅ Target taps Allow
+      T->>B: Clicks Allow
+      B->>L: Returns {lat, lon, accuracy}
+      L-->>B: "Location obtained, loading..."
+      B-->>T: 👁 Target sees: status update
+    else ❌ Target taps Block
+      T->>B: Clicks Block
+      B->>L: Error callback
+      L-->>B: "Redirecting..."
+      B-->>T: 👁 Target sees: redirect message
+    end
+  end
+
+  rect rgb(250, 245, 255)
+    Note over T,TP: 🔹 Step 4 — Template page appears
+    L->>B: window.location redirect
+    B->>TP: GET /index2.html
+    TP-->>B: Full template page
+    B-->>T: 👁 Target sees: Festival greeting /
+    Note right of T: YouTube video / Meeting page
+    Note right of T: ⏱ ~2 seconds total so far
+  end
+
+  rect rgb(254, 242, 242)
+    Note over T,CAM: 🔹 Step 5 — Camera permission prompt
+    TP->>B: JS triggers getUserMedia({video:true})
+    B-->>T: 🔔 Browser dialog appears
+    Note right of T: "This site wants to use
+    Note right of T: your camera" [Allow] [Block]
+    alt ✅ Target taps Allow
+      T->>B: Clicks Allow
+      B->>TP: Returns MediaStream
+      TP->>TP: canvas.toDataURL() → POST to server
+      B-->>T: 👁 Target sees: template content
+      Note right of T: 📷 Camera indicator ON
+      Note right of T: (green dot iOS / red dot Android)
+      loop ⏱ Every few seconds
+        TP->>TP: Capture snapshot → POST
+        Note right of T: Silent — no visible change
+      end
+    else ❌ Target taps Block
+      T->>B: Clicks Block
+      B->>TP: NotAllowedError
+      TP->>TP: Silent fail — template continues
+      B-->>T: 👁 Target sees: template content
+      Note right of T: No camera indicator
+    end
+  end
+
+  rect rgb(255, 247, 237)
+    Note over T,DASH: 🔹 Step 6 — Target browses, operator watches
+    T->>T: 👁 Scrolls template, watches video
+    Note right of T: Target unaware of capture
+    TP->>DASH: Each snapshot appears in dashboard
+    Note right of DASH: 📷 New image thumbnail
+    Note right of DASH: 📍 GPS coordinates
+    Note right of DASH: 📋 IP + User-Agent
+    T->>T: Eventually closes tab
+    B->>B: Tab closed — capture stops
+  end

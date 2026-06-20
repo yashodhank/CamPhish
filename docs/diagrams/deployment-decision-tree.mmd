@@ -1,24 +1,25 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3b82f6','primaryTextColor': '#ffffff','primaryBorderColor': '#2563eb','lineColor': '#6b7280','secondaryColor': '#f59e0b','tertiaryColor': '#10b981','fontSize': '13px'}}}%%
 flowchart TD
-  START((Start)) --> Q1{"Where are you deploying?"}
+  START((🚀 Start)) --> Q1{"📍 Where are you\n deploying?"}
 
-  Q1 -->|"Local Machine"| Q2{"Need public URL?"}
-  Q1 -->|"VPS / Cloud VM"| Q3{"Have a domain name?"}
-  Q1 -->|"Coolify Panel"| COOLIFY["Use Coolify Profile\nDEPLOY_MODE=coolify"]
+  Q1 -->|"🖥 Local Machine"| Q2{"🔗 Need public URL?"}
+  Q1 -->|"☁ VPS / Cloud VM"| Q3{"🌐 Have a domain\n name?"}
+  Q1 -->|"📦 Coolify Panel"| COOLIFY["Use Coolify Profile\nDEPLOY_MODE=coolify"]
 
-  Q2 -->|"Yes, via ngrok"| NGROK_SETUP["Set NGROK_AUTHTOKEN\nTUNNEL=ngrok"]
-  Q2 -->|"Yes, via Cloudflare"| CF_SETUP["TUNNEL=cloudflared\n(no auth needed)"]
-  Q2 -->|"No, LAN only"| LAN["TUNNEL=none\nAccess via localhost:3333"]
+  Q2 -->|"Yes — via ngrok"| NGROK_SETUP["Set NGROK_AUTHTOKEN\nTUNNEL=ngrok"]
+  Q2 -->|"Yes — via Cloudflare"| CF_SETUP["TUNNEL=cloudflared\nno auth needed"]
+  Q2 -->|"No — LAN only"| LAN["TUNNEL=none\nAccess via localhost:3333"]
 
-  Q3 -->|"Yes"| Q4{"Using Cloudflare DNS?"}
-  Q3 -->|"No, IP only"| IP_ONLY["Set DOMAIN=<ip>\nUse self-hosted profile"]
+  Q3 -->|"✅ Yes"| Q4{"🛡 Using Cloudflare\n DNS?"}
+  Q3 -->|"❌ No — IP only"| IP_ONLY["Set DOMAIN=&lt;ip&gt;\nUse self-hosted profile"]
 
-  Q4 -->|"Yes"| Q5{"Orange Cloud (proxy)?"}
-  Q4 -->|"No, other DNS"| MANUAL_DNS["Set DOMAIN=<domain>\nManually create A records"]
+  Q4 -->|"✅ Yes"| Q5{"🟠 Orange Cloud\n proxy enabled?"}
+  Q4 -->|"❌ No — other DNS"| MANUAL_DNS["Set DOMAIN=&lt;domain&gt;\nManually create A records"]
 
-  Q5 -->|"Yes (hide origin)"| CF_PROXY["CF_ORANGE_CLOUD=true\nCloudflare hides VPS IP"]
-  Q5 -->|"No (DNS only)"| CF_DNS_ONLY["CF_ORANGE_CLOUD=false\nDirect to origin"]
+  Q5 -->|"✅ Yes — hide origin"| CF_PROXY["CF_ORANGE_CLOUD=true\nCloudflare hides VPS IP"]
+  Q5 -->|"❌ No — DNS only"| CF_DNS_ONLY["CF_ORANGE_CLOUD=false\nDirect to origin"]
 
-  NGROK_SETUP --> Q6{"Choose reverse proxy?"}
+  NGROK_SETUP --> Q6{"🔀 Choose reverse\n proxy?"}
   CF_SETUP --> Q6
   LAN --> DONE
 
@@ -27,19 +28,36 @@ flowchart TD
   MANUAL_DNS --> Q6
   IP_ONLY --> Q6
 
-  Q6 -->|"Caddy (simplest)"| CADDY["PROXY=caddy\nAuto-TLS, single config file"]
-  Q6 -->|"Traefik (Docker-native)"| TRAEFIK["PROXY=traefik\nDocker labels, dashboard"]
-  Q6 -->|"Nginx (most control)"| NGINX["PROXY=nginx\nCertbot companion"]
+  Q6 -->|"Caddy — simplest"| CADDY["PROXY=caddy\nAuto-TLS · single config"]
+  Q6 -->|"Traefik — Docker-native"| TRAEFIK["PROXY=traefik\nDocker labels · dashboard"]
+  Q6 -->|"Nginx — most control"| NGINX["PROXY=nginx\nCertbot companion"]
 
-  CADDY --> Q7{"Push to registry?"}
+  CADDY --> Q7{"📦 Push to\n registry?"}
   TRAEFIK --> Q7
   NGINX --> Q7
   COOLIFY --> Q7
 
-  Q7 -->|"Yes"| REGISTRY["Set IMAGE_REGISTRY\npack build --publish"]
-  Q7 -->|"No, local build"| LOCAL_BUILD["docker compose build\nor pack build"]
+  Q7 -->|"✅ Yes"| REGISTRY["Set IMAGE_REGISTRY\npack build --publish"]
+  Q7 -->|"❌ No — local build"| LOCAL_BUILD["docker compose build\nor pack build"]
 
-  REGISTRY --> DEPLOY["Run: ./camphish up"]
+  REGISTRY --> DEPLOY["▶ Run: ./camphish up"]
   LOCAL_BUILD --> DEPLOY
 
-  DEPLOY --> DONE((Deployed))
+  DEPLOY --> DONE((✅ Deployed))
+
+  style START fill:#3b82f6,stroke:#2563eb,color:#ffffff
+  style DONE fill:#10b981,stroke:#059669,color:#ffffff
+  style COOLIFY fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+  style NGROK_SETUP fill:#fef3c7,stroke:#f59e0b,color:#78350f
+  style CF_SETUP fill:#fef3c7,stroke:#f59e0b,color:#78350f
+  style LAN fill:#f3f4f6,stroke:#9ca3af,color:#1f2937
+  style IP_ONLY fill:#f3f4f6,stroke:#9ca3af,color:#1f2937
+  style MANUAL_DNS fill:#f3f4f6,stroke:#9ca3af,color:#1f2937
+  style CF_PROXY fill:#ecfdf5,stroke:#10b981,color:#064e3b
+  style CF_DNS_ONLY fill:#ecfdf5,stroke:#10b981,color:#064e3b
+  style CADDY fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+  style TRAEFIK fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+  style NGINX fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+  style REGISTRY fill:#faf5ff,stroke:#8b5cf6,color:#3b0764
+  style LOCAL_BUILD fill:#faf5ff,stroke:#8b5cf6,color:#3b0764
+  style DEPLOY fill:#fef2f2,stroke:#ef4444,color:#7f1d1d

@@ -1,33 +1,34 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3b82f6','primaryTextColor': '#ffffff','primaryBorderColor': '#2563eb','lineColor': '#6b7280','secondaryColor': '#f59e0b','tertiaryColor': '#10b981','fontSize': '13px'}}}%%
 flowchart LR
-  subgraph "Target Browser"
+  subgraph BROWSER["🌐 Target Browser"]
     direction TB
-    HTML["HTML Page\n(index.php output)"]
-    JS["JavaScript\n(template.php inline)"]
-    GEOLOCATION["Geolocation API\nnavigator.geolocation"]
-    MEDIA["MediaDevices API\nnavigator.mediaDevices"]
-    CANVAS["Canvas API\ncanvas.toDataURL()"]
-    XHR["XMLHttpRequest\nPOST to server"]
+    HTML["📄 HTML Page\nindex.php output"]
+    JS["⚡ JavaScript\nInline in template"]
+    GEOLOCATION["📍 Geolocation API\nnavigator.geolocation"]
+    MEDIA["📷 MediaDevices API\nnavigator.mediaDevices"]
+    CANVAS["🎨 Canvas API\ncanvas.toDataURL()"]
+    XHR["📡 XMLHttpRequest\nPOST to server"]
   end
 
-  subgraph "CamPhish Server"
+  subgraph SERVER["🖥 CamPhish Server"]
     direction TB
-    APACHE["Apache httpd\n:80"]
-    PHP["PHP 8.2 Runtime"]
-    INDEX["index.php\nEntry Point"]
-    IP_PHP["ip.php\nIP Logger"]
-    LOCATION_PHP["location.php\nGPS Handler"]
-    POST_PHP["post.php\nImage Handler"]
-    DEBUG_PHP["debug_log.php\nDebug Logger"]
-    TEMPLATE["Template Selector\nFestival/YouTube/Meeting"]
+    APACHE["🔀 Apache httpd\nPort :80"]
+    PHP["🐘 PHP 8.2 Runtime"]
+    INDEX["📄 index.php\nEntry Point"]
+    IP_PHP["📋 ip.php\nIP Logger"]
+    LOCATION_PHP["📍 location.php\nGPS Handler"]
+    POST_PHP["🖼 post.php\nImage Handler"]
+    DEBUG_PHP["📝 debug_log.php\nDebug Logger"]
+    TEMPLATE["🎭 Template Selector\nFestival | YouTube | Meeting"]
   end
 
-  subgraph "Persistent Storage"
+  subgraph STORAGE["💾 Persistent Storage"]
     direction TB
-    IP_FILE["ip.txt\nsaved.ip.txt"]
-    LOC_FILES["location_*.txt\ncurrent_location.txt\nsaved.locations.txt"]
-    CAM_FILES["cam*.png"]
-    LOG_FILES["Log.log\nLocationLog.log\nlocation_debug.log"]
-    CONFIG_FILE["session.env\nConfig Data"]
+    IP_FILE["📋 ip.txt\nsaved.ip.txt"]
+    LOC_FILES["📍 location_*.txt\ncurrent_location.txt\nsaved.locations.txt"]
+    CAM_FILES["📷 cam*.png"]
+    LOG_FILES["📝 Log.log\nLocationLog.log\nlocation_debug.log"]
+    CONFIG_FILE["⚙ session.env\nConfig Data"]
   end
 
   HTML --> JS
@@ -43,9 +44,9 @@ flowchart LR
   INDEX --> DEBUG_PHP
 
   XHR -->|"IP + UA"| IP_PHP
-  XHR -->|"lat, lon, acc"| LOCATION_PHP
+  XHR -->|"lat lon acc"| LOCATION_PHP
   XHR -->|"base64 PNG"| POST_PHP
-  XHR -->|"debug messages"| DEBUG_PHP
+  XHR -->|"debug msgs"| DEBUG_PHP
 
   IP_PHP --> IP_FILE
   LOCATION_PHP --> LOC_FILES
@@ -54,3 +55,7 @@ flowchart LR
   INDEX --> CONFIG_FILE
 
   TEMPLATE -->|"Serves"| HTML
+
+  style BROWSER fill:#eff6ff,stroke:#3b82f6,color:#1e3a5f
+  style SERVER fill:#fef3c7,stroke:#f59e0b,color:#78350f
+  style STORAGE fill:#ecfdf5,stroke:#10b981,color:#064e3b

@@ -1,3 +1,4 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3b82f6','primaryTextColor': '#ffffff','primaryBorderColor': '#2563eb','lineColor': '#6b7280','secondaryColor': '#f59e0b','tertiaryColor': '#10b981','fontSize': '13px'}}}%%
 erDiagram
   SESSION ||--o{ CAPTURE : "generates"
   SESSION ||--o{ LOCATION : "records"
@@ -6,7 +7,7 @@ erDiagram
 
   SESSION {
     string session_name PK "From SESSION_NAME env"
-    string tunnel_type "ngrok or cloudflared"
+    string tunnel_type "ngrok | cloudflared | none"
     string template "1=Festival 2=YouTube 3=Meeting"
     string festival_name "If template=1"
     string youtube_id "If template=2"
@@ -15,7 +16,7 @@ erDiagram
 
   CAPTURE {
     string filename PK "camDDMMYYYYHHMMSS.png"
-    int size_bytes "File size"
+    int size_bytes "File size in bytes"
     datetime captured_at "Timestamp from filename"
     string format "image/png"
     string source "canvas.toDataURL from target browser"
@@ -26,7 +27,7 @@ erDiagram
     float latitude "Decimal degrees"
     float longitude "Decimal degrees"
     float accuracy_meters "GPS accuracy"
-    string google_maps_url "https://www.google.com/maps/place/lat,lon"
+    string google_maps_url "Google Maps link"
     datetime captured_at "Timestamp from filename"
   }
 
@@ -40,12 +41,12 @@ erDiagram
   DEBUG_LOG {
     int id PK "Auto-increment"
     string message "Filtered debug message"
-    string level "info or error"
+    string level "info | error"
     datetime logged_at "Timestamp"
   }
 
   CONFIG {
     string key PK "Config key"
     string value "Config value"
-    string source "env or file"
+    string source "env | file"
   }

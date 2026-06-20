@@ -1,37 +1,38 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3b82f6','primaryTextColor': '#ffffff','primaryBorderColor': '#2563eb','lineColor': '#6b7280','secondaryColor': '#f59e0b','tertiaryColor': '#10b981','fontSize': '12px'}}}%%
 flowchart TD
-  subgraph "CamPhish v3.0 Project"
+  subgraph PROJECT["📁 CamPhish v3.0 — Project Root"]
     direction TB
-    ROOT["/ (Project Root)"]
+    ROOT["/ — Project Root"]
 
-    ROOT --> CONFIG_FILES["Configuration"]
-    ROOT --> BUILD_FILES["Build System"]
-    ROOT --> APP_FILES["Application"]
-    ROOT --> DASH_FILES["Dashboard"]
-    ROOT --> PROXY_FILES["Proxy Configs"]
-    ROOT --> CF_FILES["Cloudflare Scripts"]
-    ROOT --> DOCS_FILES["Documentation"]
-    ROOT --> DATA_DIR["data/ (runtime)"]
+    ROOT --> CONFIG["⚙ Configuration"]
+    ROOT --> BUILD["🔧 Build System"]
+    ROOT --> APP["📱 Application"]
+    ROOT --> DASH["📊 Dashboard"]
+    ROOT --> PROXY["🔀 Proxy Configs"]
+    ROOT --> CF["☁ Cloudflare Scripts"]
+    ROOT --> DOCS["📚 Documentation"]
+    ROOT --> DATA["💾 data/ — runtime"]
 
-    CONFIG_FILES --> ENV[".env / .env.example"]
-    CONFIG_FILES --> TOML["project.toml"]
-    CONFIG_FILES --> COMPOSER["composer.json"]
-    CONFIG_FILES --> GITIGNORE[".gitignore"]
-    CONFIG_FILES --> DOCKERIGNORE[".dockerignore"]
+    CONFIG --> ENV[".env / .env.example"]
+    CONFIG --> TOML["project.toml"]
+    CONFIG --> COMPOSER["composer.json"]
+    CONFIG --> GITIGNORE[".gitignore"]
+    CONFIG --> DOCKERIGNORE[".dockerignore"]
 
-    BUILD_FILES --> DOCKERFILE["Dockerfile"]
-    BUILD_FILES --> COMPOSE["docker-compose.yml"]
-    BUILD_FILES --> MAKEFILE["Makefile"]
-    BUILD_FILES --> CAMPHISH["camphish (CLI)"]
-    BUILD_FILES --> PACK_BUILD["pack/build.sh"]
-    BUILD_FILES --> PACK_RUN["pack/run.sh"]
-    BUILD_FILES --> DOCKER_DIR["docker/"]
+    BUILD --> DOCKERFILE["Dockerfile"]
+    BUILD --> COMPOSE["docker-compose.yml"]
+    BUILD --> MAKEFILE["Makefile"]
+    BUILD --> CAMPHISH["camphish — CLI"]
+    BUILD --> PACK_BUILD["pack/build.sh"]
+    BUILD --> PACK_RUN["pack/run.sh"]
+    BUILD --> DOCKER_DIR["docker/"]
     DOCKER_DIR --> ENTRYPOINT["entrypoint.sh"]
     DOCKER_DIR --> APACHE_CONF["apache-vhost.conf"]
     DOCKER_DIR --> DASH_CONF["dashboard-vhost.conf"]
     DOCKER_DIR --> DASH_DOCKERFILE["Dockerfile.dashboard"]
     DOCKER_DIR --> PHP_INI["php.ini"]
 
-    APP_FILES --> APP_PUBLIC["app/public/"]
+    APP --> APP_PUBLIC["app/public/"]
     APP_PUBLIC --> INDEX["index.php"]
     APP_PUBLIC --> IP["ip.php"]
     APP_PUBLIC --> LOCATION["location.php"]
@@ -45,40 +46,51 @@ flowchart TD
     TEMPLATES --> YT["LiveYTTV.html"]
     TEMPLATES --> MEET["OnlineMeeting.html"]
 
-    DASH_FILES --> DASH_INDEX["app/dashboard/index.php"]
-    DASH_FILES --> DASH_API["app/dashboard/api/capture.php"]
+    DASH --> DASH_INDEX["app/dashboard/index.php"]
+    DASH --> DASH_API["app/dashboard/api/capture.php"]
 
-    PROXY_FILES --> CADDY_DIR["proxy/caddy/Caddyfile"]
-    PROXY_FILES --> TRAEFIK_DIR["proxy/traefik/"]
+    PROXY --> CADDY_DIR["proxy/caddy/Caddyfile"]
+    PROXY --> TRAEFIK_DIR["proxy/traefik/"]
     TRAEFIK_DIR --> TRAEFIK_YML["traefik.yml"]
     TRAEFIK_DIR --> TRAEFIK_DYN["dynamic.yml"]
-    PROXY_FILES --> NGINX_DIR["proxy/nginx/"]
+    PROXY --> NGINX_DIR["proxy/nginx/"]
     NGINX_DIR --> NGINX_CONF["nginx.conf"]
     NGINX_DIR --> NGINX_APP["conf.d/camphish.conf"]
     NGINX_DIR --> NGINX_DASH["conf.d/dashboard.conf"]
 
-    CF_FILES --> CF_SETUP["cloudflare/dns-setup.sh"]
-    CF_FILES --> CF_DELETE["cloudflare/dns-delete.sh"]
+    CF --> CF_SETUP["cloudflare/dns-setup.sh"]
+    CF --> CF_DELETE["cloudflare/dns-delete.sh"]
 
-    DOCS_FILES --> README["README.md"]
-    DOCS_FILES --> OPS["docs/OPS.md"]
-    DOCS_FILES --> DEV["docs/DEVELOPER.md"]
-    DOCS_FILES --> USER["docs/USER.md"]
-    DOCS_FILES --> ANALYSIS["docs/ANALYSIS.md"]
-    DOCS_FILES --> DIAGRAMS["docs/diagrams/"]
+    DOCS --> README["README.md"]
+    DOCS --> OPS["docs/OPS.md"]
+    DOCS --> DEV["docs/DEVELOPER.md"]
+    DOCS --> USER["docs/USER.md"]
+    DOCS --> ANALYSIS["docs/ANALYSIS.md"]
+    DOCS --> DIAGRAMS["docs/diagrams/"]
     DIAGRAMS --> ARCH["architecture.mmd"]
     DIAGRAMS --> NET["network-topology.mmd"]
     DIAGRAMS --> FLOW["target-visit-flow.mmd"]
     DIAGRAMS --> STATE["target-state-machine.mmd"]
     DIAGRAMS --> DECISION["deployment-decision-tree.mmd"]
     DIAGRAMS --> ER["data-model.mmd"]
-    DIAGRAMS --> BUILD["build-deploy-flow.mmd"]
+    DIAGRAMS --> BUILD_FLOW["build-deploy-flow.mmd"]
     DIAGRAMS --> DFD["data-flow-dfd.mmd"]
     DIAGRAMS --> MIND["project-mindmap.mmd"]
     DIAGRAMS --> BIZ["business-process.mmd"]
+    DIAGRAMS --> LANDING["landing-page-visitor.mmd"]
 
-    DATA_DIR --> CAPTURES["captures/"]
-    DATA_DIR --> LOCATIONS["locations/"]
-    DATA_DIR --> LOGS["logs/"]
-    DATA_DIR --> CONFIG["config/"]
+    DATA --> CAPTURES["captures/"]
+    DATA --> LOCATIONS["locations/"]
+    DATA --> LOGS["logs/"]
+    DATA --> CONFIG_DIR["config/"]
   end
+
+  style PROJECT fill:#f8fafc,stroke:#94a3b8,color:#0f172a
+  style CONFIG fill:#eff6ff,stroke:#3b82f6,color:#1e3a5f
+  style BUILD fill:#fef3c7,stroke:#f59e0b,color:#78350f
+  style APP fill:#ecfdf5,stroke:#10b981,color:#064e3b
+  style DASH fill:#faf5ff,stroke:#8b5cf6,color:#3b0764
+  style PROXY fill:#fef2f2,stroke:#ef4444,color:#7f1d1d
+  style CF fill:#fff7ed,stroke:#f97316,color:#7c2d12
+  style DOCS fill:#f0fdf4,stroke:#22c55e,color:#14532d
+  style DATA fill:#f5f5f4,stroke:#78716c,color:#292524
