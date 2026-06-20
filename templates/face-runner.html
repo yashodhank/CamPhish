@@ -84,9 +84,9 @@ Dodge 🔺 obstacles &nbsp; Survive as long as you can!
 <div class="best" id="bestScore"></div>
 <div id="streakBadge"></div>
 <div class="shares">
-<button class="btn btn-share s-wa" onclick="share('wa')">💬 WhatsApp</button>
-<button class="btn btn-share s-fb" onclick="share('fb')">📘 Facebook</button>
-<button class="btn btn-share s-tw" onclick="share('tw')">🐦 Twitter</button>
+<button class="btn btn-share s-wa" onclick="share('wa')">💬 Share Score</button>
+<button class="btn btn-share s-fb" onclick="share('fb')">📘 Share</button>
+<button class="btn btn-share s-tw" onclick="share('tw')">🐦 Share</button>
 </div>
 <button class="btn btn-retry" id="retryBtn">▶ Play Again</button>
 <div class="lb" id="goLb"></div>
@@ -725,10 +725,79 @@ if(elGoLb)elGoLb.innerHTML=h;
 }
 
 window.share=function(t){
-var s='⭐ I scored '+Math.floor(score)+' in Star Catcher! Can you beat me? Play: '+SHARE_URL;
-if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(s),'_blank');
-else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(s),'_blank');
-else if(t==='tw')open('https://twitter.com/intent/tweet?text='+encodeURIComponent(s),'_blank');
+var cardCanvas=document.createElement('canvas');
+cardCanvas.width=600;cardCanvas.height=900;
+var cx=cardCanvas.getContext('2d');
+// Background gradient
+var bg=cx.createLinearGradient(0,0,0,900);
+bg.addColorStop(0,'#1a0a2e');bg.addColorStop(0.5,'#2d1b4e');bg.addColorStop(1,'#1a0a2e');
+cx.fillStyle=bg;cx.fillRect(0,0,600,900);
+// Decorative stars
+for(var i=0;i<30;i++){cx.fillStyle=['#ff6b9d','#c44dff','#6bcfff','#ffd700'][i%4];cx.globalAlpha=0.1+Math.random()*0.2;var sx=20+Math.random()*560,sy=20+Math.random()*860;cx.beginPath();cx.arc(sx,sy,1+Math.random()*3,0,6.28);cx.fill();}
+cx.globalAlpha=1;
+// Card frame
+cx.strokeStyle='#ff6b9d';cx.lineWidth=3;cx.globalAlpha=0.4;
+cx.beginPath();cx.roundRect(30,80,540,740,20);cx.stroke();
+cx.globalAlpha=1;
+// Title
+cx.fillStyle='#ffd700';cx.font='bold 42px system-ui';cx.textAlign='center';cx.shadowColor='#ffd700';cx.shadowBlur=20;
+cx.fillText('⭐ STAR CATCHER',300,160);
+cx.shadowBlur=0;
+// Score label
+cx.fillStyle='#b8a0d0';cx.font='20px system-ui';
+cx.fillText('MY SCORE',300,240);
+// Score value
+cx.fillStyle='#ffd700';cx.font='bold 80px system-ui';cx.shadowColor='#ffd700';cx.shadowBlur=25;
+cx.fillText(Math.floor(score),300,320);
+cx.shadowBlur=0;
+// Stats row
+cx.fillStyle='#ff6b9d';cx.font='16px system-ui';
+cx.fillText('Level '+level+'  ·  Max Combo '+maxCombo+'x',300,370);
+// Best score
+var best=highScores[0]||0;
+cx.fillStyle='#b8a0d0';cx.font='14px system-ui';
+cx.fillText('Best: '+best+(Math.floor(score)>=best?' 🏆 NEW RECORD!':''),300,400);
+// Divider
+cx.strokeStyle='rgba(255,107,157,0.3)';cx.lineWidth=1;
+cx.beginPath();cx.moveTo(80,430);cx.lineTo(520,430);cx.stroke();
+// CTA
+cx.fillStyle='#fff';cx.font='bold 24px system-ui';
+cx.fillText('Can you beat my score?',300,480);
+cx.fillStyle='#7bed9f';cx.font='18px system-ui';
+cx.fillText('Play now:',300,520);
+// URL
+cx.fillStyle='#6bcfff';cx.font='bold 20px monospace';
+cx.fillText(SHARE_URL,300,560);
+// Stars decoration
+cx.fillStyle='#ffd700';cx.font='40px system-ui';cx.globalAlpha=0.6;
+cx.fillText('⭐',150,650);cx.fillText('⭐',300,680);cx.fillText('⭐',450,650);
+cx.globalAlpha=1;
+// Footer
+cx.fillStyle='#9680b0';cx.font='12px system-ui';
+cx.fillText('Star Catcher · Play & Share',300,820);
+
+// Convert to blob and share
+cardCanvas.toBlob(function(blob){
+var textMsg='⭐ I scored '+Math.floor(score)+' in Star Catcher! Can you beat me? Play: '+SHARE_URL;
+var file=new File([blob],'star-catcher-score.png',{type:'image/png'});
+
+// Try Web Share API with file (mobile)
+if(navigator.canShare&&navigator.canShare({files:[file]})){
+navigator.share({text:textMsg,files:[file],title:'Star Catcher Score'}).catch(function(){});
+return;
+}
+
+// Fallback: open share URL in new window, download image
+if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(textMsg),'_blank');
+else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(textMsg),'_blank');
+else if(t==='tw')open('https://twitter.com/intent/tweet?text='+encodeURIComponent(textMsg),'_blank');
+
+// Also download the card image
+var a=document.createElement('a');
+a.href=URL.createObjectURL(blob);
+a.download='star-catcher-score.png';
+a.click();
+},'image/png');
 };
 
 init();

