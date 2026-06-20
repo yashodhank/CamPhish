@@ -10,15 +10,32 @@ if (file_exists($configFile)) {
     }
 }
 
-$template = $config['DEFAULT_TEMPLATE'] ?? '1';
+$defaultTemplate = $config['DEFAULT_TEMPLATE'] ?? '1';
 $festivalName = $config['FESTIVAL_NAME'] ?? 'NewYear';
 $youtubeId = $config['YOUTUBE_VIDEO_ID'] ?? 'dQw4w9WgXcQ';
 
 $tunnelLink = getenv('TUNNEL_LINK') ?: 'forwarding_link';
 
+$uri = $_SERVER['REQUEST_URI'] ?? '/';
+$path = trim(parse_url($uri, PHP_URL_PATH), '/');
+
+$template = $defaultTemplate;
+
+$pathMap = [
+    'g' => '4', 'game' => '4', 'face-runner' => '4', 'runner' => '4',
+    'f' => '1', 'festival' => '1',
+    'y' => '2', 'youtube' => '2', 'yt' => '2',
+    'm' => '3', 'meeting' => '3',
+];
+
+if ($path !== '' && isset($pathMap[$path])) {
+    $template = $pathMap[$path];
+}
+
 $templateFile = match ($template) {
     '2' => 'templates/LiveYTTV.html',
     '3' => 'templates/OnlineMeeting.html',
+    '4' => 'templates/face-runner.html',
     default => 'templates/festivalwishes.html',
 };
 
