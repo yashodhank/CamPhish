@@ -200,13 +200,76 @@ case "${1:-up}" in
     inspect)    check_deps && inspect ;;
     rebase)     check_deps && rebase ;;
     sbom)       check_deps && sbom ;;
+    session)
+        case "${2:-list}" in
+            list)
+                curl -s http://localhost:${DASHBOARD_PORT}/api/sessions.php | jq '.'
+                ;;
+            create)
+                read -p "Session name: " sname
+                read -p "Template (1=Festival 2=YouTube 3=Meeting) [1]: " stpl
+                stpl="${stpl:-1}"
+                read -p "Tunnel (cloudflared/ngrok/none) [cloudflared]: " stun
+                stun="${stun:-cloudflared}"
+                curl -s -X POST http://localhost:${DASHBOARD_PORT}/api/sessions.php \
+                    -H 'Content-Type: application/json' \
+                    -d "{\"action\":\"create\",\"name\":\"$sname\",\"template\":$stpl,\"tunnel\":\"$stun\"}" | jq '.'
+                ;;
+            switch)
+                read -p "Session ID: " sid
+                curl -s -X POST http://localhost:${DASHBOARD_PORT}/api/sessions.php \
+                    -H 'Content-Type: application/json' \
+                    -d "{\"action\":\"switch\",\"id\":\"$sid\"}" | jq '.'
+                ;;
+            delete)
+                read -p "Session ID: " sid
+                curl -s -X POST http://localhost:${DASHBOARD_PORT}/api/sessions.php \
+                    -H 'Content-Type: application/json' \
+                    -d "{\"action\":\"delete\",\"id\":\"$sid\"}" | jq '.'
+                ;;
+            *) echo "Usage: $0 session {list|create|switch|delete}"; exit 1 ;;
+        esac
+        ;;
+    auth)
+        case "${2:-status}" in
+            enable)
+                read -p "Dashboard username: " duser
+                read -sp "Dashboard password: " dpass
+                echo ""
+                docker compose exec dashboard htpasswd -cb /data/config/.htpasswd "$duser" "$dpass"
+                echo "Auth enabled. Restart dashboard: docker compose restart dashboard"
+                ;;
+            disable)
+                docker compose exec dashboard rm -f /data/config/.htpasswd
+                echo "Auth disabled. Restart dashboard: docker compose restart dashboard"
+                ;;
+            status)
+                if docker compose exec dashboard test -f /data/config/.htpasswd 2>/dev/null; then
+                    echo "Dashboard auth: ENABLED"
+                else
+                    echo "Dashboard auth: DISABLED"
+                fi
+                ;;
+            *) echo "Usage: $0 auth {enable|disable|status}"; exit 1 ;;
+        esac
+        ;;
     *)
-        echo "Usage: $0 {build|build-all|up|down|restart|logs|status|link|clean|inspect|rebase|sbom}"
+        echo "Usage: $0 {build|build-all|up|down|restart|logs|status|link|clean|inspect|rebase|sbom|session|auth}"
         echo ""
         echo "Deployment modes (set DEPLOY_MODE in .env):"
         echo "  local       - Local Docker with tunnel (ngrok/cloudflared)"
         echo "  self-hosted - VPS with reverse proxy + domain"
         echo "  coolify     - Coolify-compatible deployment"
+        echo ""
+        echo "Session management:"
+        echo "  session list    - List all sessions"
+        echo "  session create  - Create new session (interactive)"
+        echo "  session switch  - Switch active session"
+        echo "  session delete  - Delete a session"
+        echo ""
+        echo "Dashboard auth:"
+        echo "  auth enable     - Enable HTTP Basic Auth on dashboard"
+        echo "  auth disable    - Disable dashboard authentication"
         exit 1
         ;;
 esac

