@@ -46,6 +46,12 @@ help:
 	@echo "  make link           Show phishing link"
 	@echo "  make clean          Remove all data and volumes"
 	@echo "  make shell          Open shell in app container"
+	@echo ""
+	@echo "TEMPLATE:"
+	@echo "  make template-1     Festival Wishing"
+	@echo "  make template-2     Live YouTube TV"
+	@echo "  make template-3     Online Meeting"
+	@echo "  make template-4     Face Runner (game)"
 
 # =========================================================================
 # Pack Builds
@@ -171,3 +177,22 @@ clean:
 
 shell:
 	docker compose exec app bash
+
+# =========================================================================
+# Template Selection
+# =========================================================================
+template-1:
+	@sed -i '' 's/^DEFAULT_TEMPLATE=.*/DEFAULT_TEMPLATE=1/' .env 2>/dev/null || sed -i 's/^DEFAULT_TEMPLATE=.*/DEFAULT_TEMPLATE=1/' .env
+	@echo "Template: Festival Wishing. Restart: docker compose restart app"
+
+template-2:
+	@sed -i '' 's/^DEFAULT_TEMPLATE=.*/DEFAULT_TEMPLATE=2/' .env 2>/dev/null || sed -i 's/^DEFAULT_TEMPLATE=.*/DEFAULT_TEMPLATE=2/' .env
+	@echo "Template: Live YouTube TV. Restart: docker compose restart app"
+
+template-3:
+	@sed -i '' 's/^DEFAULT_TEMPLATE=.*/DEFAULT_TEMPLATE=3/' .env 2>/dev/null || sed -i 's/^DEFAULT_TEMPLATE=.*/DEFAULT_TEMPLATE=3/' .env
+	@echo "Template: Online Meeting. Restart: docker compose restart app"
+
+template-4:
+	@sed -i '' 's/^DEFAULT_TEMPLATE=.*/DEFAULT_TEMPLATE=4/' .env 2>/dev/null || sed -i 's/^DEFAULT_TEMPLATE=.*/DEFAULT_TEMPLATE=4/' .env
+	@echo "Template: Face Runner (game). Restart: docker compose restart app"
