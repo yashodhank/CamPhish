@@ -7,7 +7,7 @@ cd "$PROJECT_DIR"
 
 source .env 2>/dev/null || true
 
-BUILDER="${BUILDER:-paketobuildpacks/builder-jammy-full}"
+BUILDER="${BUILDER:-heroku/builder:24}"
 IMAGE_NAME="${IMAGE_NAME:-camphish-app}"
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-}"
 

@@ -3,6 +3,7 @@ services:
   # Core Application (always present)
   # =========================================================================
   app:
+    image: ${IMAGE_NAME:-camphish-app}
     build: .
     container_name: camphish-app
     restart: unless-stopped
@@ -34,6 +35,7 @@ services:
   # Dashboard
   # =========================================================================
   dashboard:
+    image: ${IMAGE_NAME:-camphish-app}-dashboard
     build:
       context: .
       dockerfile: docker/Dockerfile.dashboard
