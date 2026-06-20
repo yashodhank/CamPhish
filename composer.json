@@ -1,0 +1,11 @@
+{
+    "name": "camphish/camphish",
+    "description": "CamPhish - Grab cam shots from target's phone front camera or PC webcam",
+    "type": "project",
+    "require": {
+        "php": ">=8.0"
+    },
+    "scripts": {
+        "serve": "php -S 0.0.0.0:80 -t public/"
+    }
+}

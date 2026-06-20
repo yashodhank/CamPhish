@@ -1,0 +1,72 @@
+flowchart TD
+  subgraph "Deployment Modes"
+    LOCAL["Local Mode\nDocker + Tunnel"]
+    SELF["Self-Hosted Mode\nVPS + Domain + Proxy"]
+    COOLIFY["Coolify Mode\nPanel-Managed"]
+  end
+
+  subgraph "Tunnel Layer (Local)"
+    NGROK["Ngrok Container\nngrok/ngrok:latest"]
+    CFLARED["Cloudflared Container\ncloudflare/cloudflared:latest"]
+  end
+
+  subgraph "Proxy Layer (Self-Hosted)"
+    CADDY["Caddy\nAuto-TLS"]
+    TRAEFIK["Traefik\nDocker Discovery"]
+    NGINX["Nginx\nCertbot Companion"]
+  end
+
+  subgraph "Application Layer"
+    APP["CamPhish App\nPHP 8.2 + Apache\nPort 80"]
+    DASH["Dashboard\nPHP 8.2 + Apache\nPort 80"]
+  end
+
+  subgraph "Storage Layer"
+    CAPTURES[("Captures\n/data/captures")]
+    LOCATIONS[("Locations\n/data/locations")]
+    LOGS[("Logs\n/data/logs")]
+    CONFIG[("Config\n/data/config")]
+  end
+
+  subgraph "External"
+    TARGET["Target Device\nBrowser"]
+    OPERATOR["Operator\nCLI / Dashboard"]
+    CF_DNS["Cloudflare DNS\nAPI"]
+    REGISTRY["Container Registry\nghcr.io / Docker Hub"]
+  end
+
+  subgraph "Build System"
+    PACK["pack CLI\nCloud Native Buildpacks"]
+    BUILDER["Heroku Builder\nheroku/builder:24"]
+    DOCKERFILE["Dockerfile\nFallback Build"]
+  end
+
+  LOCAL --> NGROK
+  LOCAL --> CFLARED
+  SELF --> CADDY
+  SELF --> TRAEFIK
+  SELF --> NGINX
+  NGROK & CFLARED --> APP
+  CADDY & TRAEFIK & NGINX --> APP
+  CADDY & TRAEFIK & NGINX --> DASH
+  APP --> CAPTURES
+  APP --> LOCATIONS
+  APP --> LOGS
+  APP --> CONFIG
+  DASH --> CAPTURES
+  DASH --> LOCATIONS
+  DASH --> LOGS
+  DASH --> CONFIG
+  TARGET -->|"HTTPS Link"| NGROK
+  TARGET -->|"HTTPS Link"| CFLARED
+  TARGET -->|"HTTPS"| CADDY
+  TARGET -->|"HTTPS"| TRAEFIK
+  TARGET -->|"HTTPS"| NGINX
+  OPERATOR -->|"CLI"| APP
+  OPERATOR -->|"Browser"| DASH
+  SELF -->|"DNS Records"| CF_DNS
+  PACK --> BUILDER
+  BUILDER -->|"OCI Image"| REGISTRY
+  DOCKERFILE -->|"Docker Image"| REGISTRY
+  REGISTRY --> APP
+  REGISTRY --> DASH

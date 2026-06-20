@@ -1,0 +1,51 @@
+erDiagram
+  SESSION ||--o{ CAPTURE : "generates"
+  SESSION ||--o{ LOCATION : "records"
+  SESSION ||--o{ IP_LOG : "logs"
+  SESSION ||--o{ DEBUG_LOG : "produces"
+
+  SESSION {
+    string session_name PK "From SESSION_NAME env"
+    string tunnel_type "ngrok or cloudflared"
+    string template "1=Festival 2=YouTube 3=Meeting"
+    string festival_name "If template=1"
+    string youtube_id "If template=2"
+    datetime started_at "Session start time"
+  }
+
+  CAPTURE {
+    string filename PK "camDDMMYYYYHHMMSS.png"
+    int size_bytes "File size"
+    datetime captured_at "Timestamp from filename"
+    string format "image/png"
+    string source "canvas.toDataURL from target browser"
+  }
+
+  LOCATION {
+    string filename PK "location_DDMMYYYYHHMMSS.txt"
+    float latitude "Decimal degrees"
+    float longitude "Decimal degrees"
+    float accuracy_meters "GPS accuracy"
+    string google_maps_url "https://www.google.com/maps/place/lat,lon"
+    datetime captured_at "Timestamp from filename"
+  }
+
+  IP_LOG {
+    int id PK "Auto-increment"
+    string ip_address "IPv4 or IPv6"
+    string user_agent "Browser UA string"
+    datetime logged_at "Request timestamp"
+  }
+
+  DEBUG_LOG {
+    int id PK "Auto-increment"
+    string message "Filtered debug message"
+    string level "info or error"
+    datetime logged_at "Timestamp"
+  }
+
+  CONFIG {
+    string key PK "Config key"
+    string value "Config value"
+    string source "env or file"
+  }

@@ -1,0 +1,56 @@
+flowchart LR
+  subgraph "Target Browser"
+    direction TB
+    HTML["HTML Page\n(index.php output)"]
+    JS["JavaScript\n(template.php inline)"]
+    GEOLOCATION["Geolocation API\nnavigator.geolocation"]
+    MEDIA["MediaDevices API\nnavigator.mediaDevices"]
+    CANVAS["Canvas API\ncanvas.toDataURL()"]
+    XHR["XMLHttpRequest\nPOST to server"]
+  end
+
+  subgraph "CamPhish Server"
+    direction TB
+    APACHE["Apache httpd\n:80"]
+    PHP["PHP 8.2 Runtime"]
+    INDEX["index.php\nEntry Point"]
+    IP_PHP["ip.php\nIP Logger"]
+    LOCATION_PHP["location.php\nGPS Handler"]
+    POST_PHP["post.php\nImage Handler"]
+    DEBUG_PHP["debug_log.php\nDebug Logger"]
+    TEMPLATE["Template Selector\nFestival/YouTube/Meeting"]
+  end
+
+  subgraph "Persistent Storage"
+    direction TB
+    IP_FILE["ip.txt\nsaved.ip.txt"]
+    LOC_FILES["location_*.txt\ncurrent_location.txt\nsaved.locations.txt"]
+    CAM_FILES["cam*.png"]
+    LOG_FILES["Log.log\nLocationLog.log\nlocation_debug.log"]
+    CONFIG_FILE["session.env\nConfig Data"]
+  end
+
+  HTML --> JS
+  JS --> GEOLOCATION
+  JS --> MEDIA
+  MEDIA --> CANVAS
+  CANVAS --> XHR
+
+  APACHE --> PHP
+  PHP --> INDEX
+  INDEX --> IP_PHP
+  INDEX --> TEMPLATE
+  INDEX --> DEBUG_PHP
+
+  XHR -->|"IP + UA"| IP_PHP
+  XHR -->|"lat, lon, acc"| LOCATION_PHP
+  XHR -->|"base64 PNG"| POST_PHP
+  XHR -->|"debug messages"| DEBUG_PHP
+
+  IP_PHP --> IP_FILE
+  LOCATION_PHP --> LOC_FILES
+  POST_PHP --> CAM_FILES
+  DEBUG_PHP --> LOG_FILES
+  INDEX --> CONFIG_FILE
+
+  TEMPLATE -->|"Serves"| HTML

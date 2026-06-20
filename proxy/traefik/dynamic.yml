@@ -1,0 +1,38 @@
+http:
+  routers:
+    camphish-app:
+      rule: "Host(`{{ env "SUBDOMAIN" }}.{{ env "DOMAIN" }}`)"
+      entryPoints: ["websecure"]
+      service: camphish-app
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+
+    camphish-dashboard:
+      rule: "Host(`dashboard.{{ env "SUBDOMAIN" }}.{{ env "DOMAIN" }}`)"
+      entryPoints: ["websecure"]
+      service: camphish-dashboard
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+
+  services:
+    camphish-app:
+      loadBalancer:
+        servers:
+          - url: "http://camphish-app-self-hosted:80"
+
+    camphish-dashboard:
+      loadBalancer:
+        servers:
+          - url: "http://camphish-dashboard-self-hosted:80"
+
+  middlewares:
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        customFrameOptionsValue: "SAMEORIGIN"

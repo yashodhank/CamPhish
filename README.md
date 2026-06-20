@@ -1,94 +1,224 @@
-# CamPhish
-Grab cam shots from target's phone front camera or PC webcam just sending a link.
-![CamPhish](https://techchip.net/wp-content/uploads/2020/04/camphish.jpg)
+# CamPhish v3.0
 
-# What is CamPhish?
-<p>CamPhish is techniques to take cam shots of target's phone front camera or PC webcam. CamPhish Hosts a fake website on in built PHP server and uses ngrok & CloudFlare Tunnel to generate a link which we will forward to the target, which can be used on over internet. website asks for camera permission and if the target allows it, this tool grab camshots of target's device
+**Grab camera shots from a target's phone or PC webcam by sending a link.**
 
-A GPS location capture feature has been added.</p>
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)](https://www.docker.com/)
+[![Buildpacks](https://img.shields.io/badge/Buildpacks-CNCF-5C4EE5)](https://buildpacks.io/)
+[![PHP](https://img.shields.io/badge/PHP-8.2-777BB4?logo=php)](https://www.php.net/)
 
-## Features
-<p>In this tool I added two automatic webpage templates for engaged target on webpage to get more picture of cam</p>
-<ul>
-  <li>Festival Wishing</li>
-  <li>Live YouTube TV</li>
-  <li>Online Meeting [Beta]</li>
-  <li>GPS Location Tracking</li>
-</ul>
-<p>A cleanup script has been added to remove all unnecessary files and logs.</p>
+---
 
-## This Tool Tested On :
-<ul>
-  <li>Kali Linux</li>
-  <li>Termux</li>
-  <li>MacOS</li>
-  <li>Ubuntu</li>
-  <li>Parrot Sec OS</li>
-  <li>Windows (WSL)</li>
-</ul>
+## Architecture Overview
 
-# Installing and requirements
-<p>This tool require PHP for webserver, and wget for downloading dependencies. First run following command on your terminal</p>
+![Architecture](docs/diagrams/architecture.png)
 
-```
-apt-get -y install php wget unzip
-```
+CamPhish v3.0 is a **containerized, multi-mode deployment system** built on Docker Compose with Cloud Native Buildpacks. It replaces the original single bash script with a production-grade architecture supporting three deployment modes, three reverse proxy options, and two tunnel providers.
 
-## Installing (Kali Linux/Termux):
+### Project Mind Map
 
-```
-git clone https://github.com/techchipnet/CamPhish
+![Mind Map](docs/diagrams/project-mindmap.png)
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/yashodhank/CamPhish
 cd CamPhish
-bash camphish.sh
+cp .env.example .env
+# Edit .env to set TUNNEL=cloudflared (or ngrok with token)
+./camphish up
 ```
 
-## Clean logs & unnecessary files :
+**That's it.** You get:
+- A phishing link (Cloudflare Tunnel or ngrok URL)
+- A dashboard at `http://localhost:8080` to view captures, GPS locations, and IP logs
+
+---
+
+## Deployment Modes
+
+| Mode | Use Case | Command |
+|------|----------|---------|
+| **Local** | Laptop/desktop with tunnel | `DEPLOY_MODE=local ./camphish up` |
+| **Self-Hosted** | VPS with custom domain + TLS | `DEPLOY_MODE=self-hosted ./camphish up` |
+| **Coolify** | Coolify panel auto-discovery | `DEPLOY_MODE=coolify ./camphish up` |
+
+### Deployment Decision Tree
+
+![Decision Tree](docs/diagrams/deployment-decision-tree.png)
+
+---
+
+## Network Topology
+
+![Network Topology](docs/diagrams/network-topology.png)
+
+### How a Target Visit Works
+
+![Target Visit Flow](docs/diagrams/target-visit-flow.png)
+
+1. Target clicks the phishing link
+2. Landing page loads → IP + User-Agent logged
+3. Browser requests geolocation → GPS coordinates saved
+4. Redirect to template (Festival / YouTube / Meeting)
+5. Template requests camera permission → periodic snapshots captured
+6. All data viewable in real-time on the dashboard
+
+### Target Interaction State Machine
+
+![State Machine](docs/diagrams/target-state-machine.png)
+
+---
+
+## Data Model
+
+![Data Model](docs/diagrams/data-model.png)
+
+All captured data is stored in persistent Docker volumes under `./data/`:
+
+| Directory | Contents |
+|-----------|----------|
+| `data/captures/` | PNG camera snapshots (`camDDMMYYYYHHMMSS.png`) |
+| `data/locations/` | GPS data files with Google Maps links |
+| `data/logs/` | IP logs, debug logs, session markers |
+| `data/config/` | Runtime configuration (`session.env`) |
+
+---
+
+## Build System
+
+CamPhish supports **two build paths**:
+
+### Path A: Cloud Native Buildpacks (pack CLI)
+
+```bash
+./camphish build        # Build OCI image with heroku/builder:24
+./camphish build-all    # Build app + dashboard
+./camphish inspect      # Inspect image layers
+./camphish rebase       # Rebase on updated run image
+./camphish sbom         # Download Software Bill of Materials
+```
+
+Uses `heroku/builder:24` which provides PHP 8.5, Apache 2.4, and Composer. The build process is fully automated — no Dockerfile needed.
+
+### Path B: Dockerfile (fallback)
+
+```bash
+docker compose build app
+docker compose build dashboard
+```
+
+Traditional Dockerfile build for environments where pack CLI is unavailable.
+
+![Build & Deploy Flow](docs/diagrams/build-deploy-flow.png)
+
+---
+
+## Reverse Proxy Options (Self-Hosted Mode)
+
+| Proxy | Profile | Key Feature |
+|-------|---------|-------------|
+| **Caddy** | `proxy-caddy` | Auto-TLS via Let's Encrypt, single Caddyfile |
+| **Traefik** | `proxy-traefik` | Docker-native discovery, Cloudflare DNS-01 challenge |
+| **Nginx** | `proxy-nginx` | certbot companion, fine-grained control |
+
+Switch proxy: `make proxy-caddy` / `make proxy-traefik` / `make proxy-nginx`
+
+---
+
+## Cloudflare DNS Integration
+
+```bash
+make cf-dns         # Create/update A records for main + dashboard subdomains
+make cf-dns-delete  # Remove DNS records
+```
+
+- **Orange Cloud ON** (`CF_ORANGE_CLOUD=true`): Cloudflare proxies traffic, hides origin IP
+- **Orange Cloud OFF** (`CF_ORANGE_CLOUD=false`): DNS-only, direct to origin
+
+---
+
+## Dashboard
+
+![Business Process](docs/diagrams/business-process.png)
+
+Access at `http://localhost:8080` (local) or `https://dashboard.camphish.example.com` (self-hosted).
+
+Features:
+- **Capture Gallery** — clickable thumbnails with lightbox modal
+- **GPS Viewer** — coordinates with Google Maps links
+- **IP Log** — structured IP + User-Agent records
+- **Session Stats** — capture count, location count, IP log entries
+
+---
+
+## CLI Reference
 
 ```
-bash cleanup.sh
+./camphish build        Build OCI image with pack
+./camphish build-all    Build app + dashboard images
+./camphish up           Start deployment (mode from .env)
+./camphish down         Stop all services
+./camphish restart      Restart all services
+./camphish logs         Tail all container logs
+./camphish status       Show service health
+./camphish link         Show phishing URL
+./camphish clean        Remove all data and volumes
+./camphish inspect      Inspect built image
+./camphish rebase       Rebase image on updated run image
+./camphish sbom         Download SBOM
 ```
-<p>The cam files and saved location will also be removed.</p>
 
-## Change Log:
+---
 
-<p><b>Version: 2.0:</b> Added GPS Location Tracking</p>
-<ul>
-  <li>Added: GPS location capturing functionality</li>
-  <li>Added: Google Maps integration for captured locations</li>
-  <li>Added: Location accuracy reporting</li>
-  <li>Added: Improved loading screen with location request</li>
-</ul>
+## Project Structure
 
-<p><b>Version: 1.9:</b> Enhanced architecture detection</p>
-<ul>
-  <li>Added: Improved architecture detection for all CPU types</li>
-  <li>Added: Better support for Apple Silicon (M1/M2/M3) Macs</li>
-  <li>Added: Automatic detection of ARM, ARM64, x86, and x86_64 architectures</li>
-  <li>Fixed: Windows compatibility improvements</li>
-  <li>Fixed: CloudFlare Tunnel download issues</li>
-</ul>
+![Project Structure](docs/diagrams/project-structure.png)
 
-<p><b>Version: 1.8:</b> Added CloudFlare Tunnel and removed Serveo</p>
-<ul>
-  <li>Added: CloudFlare Tunnel support for more reliable connections</li>
-  <li>Removed: Serveo tunnel (deprecated)</li>
-  <li>Fixed: Various code improvements and bug fixes</li>
-</ul>
+---
 
-<p><b>Version: 1.7:</b> Fix and add support</p>
-<ul>
-  <li>fixed: termux failed to get home directory</li>
-  <li>Add support for Apple sillicon (M1/M2/M3 ARM64)</li>
-  <li>Add support for arm64 like Raspberry Pi</li>
-</ul>
-<p><b>Version: 1.6:</b> Fix ngrok direct link generate</p>
-<p><b>Version: 1.5:</b> Add new online meeting template</p>
-<p><b>Version: 1.4:</b> Ngrok authtoken update</p>
-<p><b>Version: 1.3:</b> Fix ngrok direct link</p>
+## Data Flow (DFD)
 
-### Important Notice
-Unauthorized reuploading of this project is prohibited.
+![Data Flow](docs/diagrams/data-flow-dfd.png)
 
-#### For More Video subcribe <a href="http://youtube.com/techchipnet">TechChip YouTube Channel</a>
-<p>CamPhish is created to help in penetration testing and it's not responsible for any misuse or illegal purposes.</p>
-<p>CamPhish is inspired by https://github.com/thelinuxchoice/ Big thanks to @thelinuxchoice</p>
+---
+
+## Documentation
+
+| Document | Audience |
+|----------|----------|
+| [README.md](README.md) | Everyone — overview and quick start |
+| [docs/OPS.md](docs/OPS.md) | DevOps/SRE — deployment, monitoring, troubleshooting |
+| [docs/DEVELOPER.md](docs/DEVELOPER.md) | Developers — architecture, code structure, contributing |
+| [docs/USER.md](docs/USER.md) | End users — how to run, templates, dashboard |
+| [docs/ANALYSIS.md](docs/ANALYSIS.md) | Technical deep-dive — security, performance, design decisions |
+
+---
+
+## Requirements
+
+- **Docker** 24+ with Docker Compose v2
+- **pack CLI** (optional, for buildpack builds): `brew install buildpacks/tap/pack`
+- **make** (optional, for Makefile targets)
+- **jq** (optional, for ngrok link extraction)
+
+---
+
+## Security
+
+- All dashboard and app ports bind to `127.0.0.1` (localhost only)
+- Reverse proxies add `X-Frame-Options`, `X-Content-Type-Options` headers
+- File operations use `LOCK_EX` for concurrent write safety
+- Input validation on all PHP endpoints
+- `.env` excluded from git via `.gitignore`
+- No secrets in committed files
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE)
+
+**Disclaimer:** CamPhish is created for authorized penetration testing and security research. Users are responsible for complying with all applicable laws and regulations.
