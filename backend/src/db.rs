@@ -19,6 +19,20 @@ pub async fn init_pool(url: &str) -> anyhow::Result<SqlitePool> {
 pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<()> {
     let sql = include_str!("../migrations/001_init.sql");
     sqlx::raw_sql(sql).execute(pool).await?;
-    tracing::info!("Database migrations applied");
+
+    // Column additions for geocoding — safe to rerun (SQLite ignores if exists)
+    for stmt in [
+        "ALTER TABLE locations ADD COLUMN address TEXT",
+        "ALTER TABLE ip_logs ADD COLUMN city TEXT",
+        "ALTER TABLE ip_logs ADD COLUMN country TEXT",
+        "ALTER TABLE ip_logs ADD COLUMN geo_data TEXT",
+        "ALTER TABLE storage_dumps ADD COLUMN ip_address TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_storage_created ON storage_dumps(created_at DESC)",
+    ] {
+        let _ = sqlx::raw_sql(stmt).execute(pool).await;
+    }
+
+    sqlx::raw_sql("PRAGMA wal_checkpoint(TRUNCATE)").execute(pool).await?;
+    tracing::info!("Database migrations applied, WAL checkpointed");
     Ok(())
 }

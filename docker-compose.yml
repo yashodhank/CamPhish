@@ -1,9 +1,11 @@
 services:
   # =========================================================================
-  # TrailBase — Data layer (REST CRUD, Realtime, Auth, Admin UI)
+  # TrailBase — Data layer (DEPRECATED — schema exists for future use,
+  # but data operations go through SQLite. The Rust app does not write to
+  # TrailBase. Keep for admin UI access if desired.)
   # =========================================================================
   trailbase:
-    image: trailbase/trailbase:latest
+    image: trailbase/trailbase:0.3.0
     container_name: camphish-trailbase
     restart: unless-stopped
     ports:
@@ -43,7 +45,7 @@ services:
       - TEMPLATES_DIR=/app/templates
       - FRONTEND_DIR=/app/frontend/dist
       - LISTEN_ADDR=0.0.0.0:8080
-      - TUNNEL_LINK=
+      - TUNNEL_LINK=${TUNNEL_LINK:-}
       - RUST_LOG=${LOG_LEVEL:-info}
       - GRACEFUL_SHUTDOWN=true
       - ENABLE_COMPRESSION=true

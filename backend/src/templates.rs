@@ -2,7 +2,8 @@ use crate::AppState;
 use axum::extract::{Path, State};
 use axum::http::header;
 use axum::http::StatusCode;
-use axum::response::{Html, Response};
+use axum::response::Response;
+use heck::ToTitleCase;
 use std::sync::Arc;
 
 pub async fn scan_and_register(state: &Arc<AppState>) -> anyhow::Result<()> {
@@ -26,7 +27,7 @@ pub async fn scan_and_register(state: &Arc<AppState>) -> anyhow::Result<()> {
         let description = get_template_description(&path);
 
         sqlx::query(
-            "INSERT OR REPLACE INTO templates (id, name, description, file_path, created_at) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO templates (id, name, description, file_path, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, description=excluded.description, file_path=excluded.file_path"
         )
         .bind(&id).bind(&name).bind(&description).bind(&file_path).bind(now)
         .execute(&state.pool).await?;
@@ -40,6 +41,10 @@ pub async fn serve_template(
     State(state): State<Arc<AppState>>,
     Path(template_id): Path<String>,
 ) -> Result<Response, StatusCode> {
+    // Increment served counter
+    let _ = sqlx::query("UPDATE templates SET total_served = total_served + 1 WHERE id = ?")
+        .bind(&template_id).execute(&state.pool).await;
+
     // Check cache first
     if let Some(cached) = state.get_cached_template(&template_id).await {
         let mut resp = Response::new(cached.into());
@@ -100,21 +105,4 @@ fn get_template_description(path: &std::path::Path) -> Option<String> {
     comment
 }
 
-trait TitleCase {
-    fn to_title_case(self) -> Self;
-}
 
-impl TitleCase for String {
-    fn to_title_case(self) -> Self {
-        self.split_whitespace()
-            .map(|word| {
-                let mut c = word.chars();
-                match c.next() {
-                    Some(first) => first.to_uppercase().collect::<String>() + c.as_str(),
-                    None => String::new(),
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-}

