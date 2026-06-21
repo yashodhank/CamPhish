@@ -15,6 +15,17 @@ echo ""
 # ─── helpers ──────────────────────────────────────────────────────────────────
 
 get_access_code() {
+    # Prefer persisted file (survives container restarts)
+    local code_file="${PROJECT_DIR}/data/.access_code"
+    if [ -f "$code_file" ]; then
+        local code
+        code=$(cat "$code_file")
+        if [ -n "$code" ] && [ ${#code} -eq 19 ]; then
+            echo "$code"
+            return
+        fi
+    fi
+    # Fallback: parse Docker logs
     docker compose logs app 2>/dev/null \
         | grep -oE '[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}' \
         | tail -1

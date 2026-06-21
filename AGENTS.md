@@ -24,6 +24,9 @@ Target Browser → CamPhish App (Rust :8080) → SQLite (primary) + TrailBase (:
 8. **Games must work WITHOUT camera** — camera is optional enhancement
 9. **Social media templates capture credentials** via `POST /api/capture/credentials`
 10. **Variable naming in JS**: use `el` prefix for DOM elements (elScore, elCombo) to avoid collisions with game state vars
+11. **ALWAYS rebuild Docker after merging backend changes**: run `docker compose build app && docker compose up -d app && sleep 5 && ./scripts/docker-code.sh`
+12. **ALWAYS show the access code** after any Docker restart: run `./scripts/docker-code.sh` to display the current code, or check `data/.access_code`
+13. **Dashboard access code persists**: written to `data/.access_code` (bind-mounted, survives restarts). Set `CAMPHISH_ACCESS_SEED` in `.env` for a deterministic code. Use `http://localhost:8080/?code=<code>` to access the dashboard, or `cat data/.access_code` to retrieve it.
 
 ## Tech Stack
 - Backend: Rust 1.96, axum 0.7, sqlx 0.8 (SQLite WAL), tower-http, reqwest (rustls)

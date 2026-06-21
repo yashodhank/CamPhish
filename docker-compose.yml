@@ -39,7 +39,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - camphish_data:/app/data
+      - ./data:/app/data
       - ./templates:/app/templates:ro
     environment:
       - DATA_DIR=/app/data
@@ -101,7 +101,6 @@ services:
       - camphish-net
 
 volumes:
-  camphish_data:
   trailbase_data:
 
 networks:

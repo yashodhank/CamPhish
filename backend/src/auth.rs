@@ -56,10 +56,33 @@ pub async fn csrf_middleware(
 
 /// Generate a human-readable access code like X7K3-M9P2-R5B1-W8D4
 ///
-/// Uses a UUID v4 and takes the first 16 hex digits in 4 groups.
-pub fn generate_access_code() -> String {
+/// Persisted in data_dir/.access_code so it survives container restarts.
+/// Override with CAMPHISH_ACCESS_SEED env var for a deterministic code.
+pub fn generate_access_code(data_dir: &str) -> String {
+    // 1. Check env override — deterministic code from seed
+    if let Some(seed) = std::env::var("CAMPHISH_ACCESS_SEED").ok().filter(|s| !s.is_empty()) {
+        let ns = uuid::Uuid::NAMESPACE_URL;
+        let uuid = uuid::Uuid::new_v5(&ns, seed.as_bytes());
+        let hex = uuid.to_string().to_uppercase();
+        let clean: String = hex.chars().filter(|c| c.is_ascii_hexdigit()).take(16).collect();
+        let groups: Vec<&str> = clean.as_bytes().chunks(4).map(|c| std::str::from_utf8(c).unwrap()).collect();
+        return groups.join("-");
+    }
+
+    // 2. Check persisted file
+    let code_file = format!("{}/.access_code", data_dir);
+    if let Ok(code) = std::fs::read_to_string(&code_file) {
+        let code = code.trim().to_string();
+        if !code.is_empty() && code.len() == 19 {
+            return code;
+        }
+    }
+
+    // 3. Generate new random code and persist
     let uuid = uuid::Uuid::new_v4().to_string().to_uppercase();
     let clean: String = uuid.chars().filter(|c| c.is_ascii_hexdigit()).take(16).collect();
     let groups: Vec<&str> = clean.as_bytes().chunks(4).map(|c| std::str::from_utf8(c).unwrap()).collect();
-    groups.join("-")
+    let code = groups.join("-");
+    let _ = std::fs::write(&code_file, &code);
+    code
 }
