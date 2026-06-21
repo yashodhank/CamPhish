@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { api } from '../api/client'
 
 interface EventRow {
   id: string
@@ -28,26 +29,45 @@ export default function SessionReplay() {
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const params = new URLSearchParams(window.location.search)
   const [selectedSession, setSelectedSession] = useState(params.get('session') || 'default')
+  const [error, setError] = useState<string | null>(null)
 
   const refresh = async () => {
     try {
-      const r = await fetch('/api/events?session=' + selectedSession)
-      setEvents(await r.json())
-    } catch (e) { console.error(e) }
+      const data = await api.events(selectedSession, 0, 500)
+      setEvents(data)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
   }
 
   useEffect(() => {
-    fetch('/api/sessions').then(r => r.json()).then(setSessions).catch(() => {})
+    api.sessions().then(setSessions).catch(() => {})
   }, [])
 
   useEffect(() => {
     refresh()
-    const t = setInterval(refresh, 3000)
-    return () => clearInterval(t)
+    let cancelled = false
+    const poll = async () => {
+      if (cancelled) return
+      await refresh()
+      if (!cancelled) setTimeout(poll, 15000)
+    }
+    setTimeout(poll, 15000)
+    return () => { cancelled = true }
   }, [selectedSession])
 
   if (loading) return <div className="flex justify-center py-20"><div className="spinner"></div></div>
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="text-4xl">⚠️</div>
+          <p className="text-sm text-tertiary">{error}</p>
+          <button onClick={refresh} className="px-4 py-2 text-sm accent-bg accent radius-sm">Retry</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">

@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { ThemeProvider, useTheme } from './theme'
+import { ThemeProvider } from './theme'
 import Dashboard from './pages/Dashboard'
 import Captures from './pages/Captures'
 import Locations from './pages/Locations'
@@ -23,19 +23,17 @@ const navItems = [
 ]
 
 function Layout() {
-  const { theme, toggle } = useTheme()
-
   return (
     <div className="min-h-screen flex bg-primary">
-      <aside className="glass-nav flex flex-col fixed h-full z-40 transition-all w-14 md:w-56">
-        <div className="p-3 md:p-4 border-b border-subtle flex items-center gap-2">
-          <span className="text-2xl select-none">🎯</span>
-          <div className="hidden md:block">
-            <h1 className="text-sm font-bold accent">CamPhish</h1>
-            <p className="text-[10px] text-tertiary">v2.1 Red Team</p>
+      <aside className="glass-nav flex flex-col fixed h-full z-40 w-14 md:w-56">
+        <div className="p-3 md:p-4 border-b border-subtle flex items-center gap-2.5">
+          <span className="text-lg select-none">🎯</span>
+          <div className="hidden md:block leading-tight">
+            <h1 className="text-sm font-semibold accent">CamPhish</h1>
+            <p className="text-[10px] text-tertiary">v2.1 · Red Team</p>
           </div>
         </div>
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-1.5 space-y-0.5 overflow-y-auto">
           {navItems.map(item => (
             <NavLink
               key={item.to}
@@ -45,28 +43,23 @@ function Layout() {
                 `nav-link ${isActive ? 'active' : ''}`
               }
             >
-              <span className="text-lg">{item.icon}</span>
+              <span className="text-base">{item.icon}</span>
               <span className="hidden md:inline">{item.label}</span>
             </NavLink>
           ))}
         </nav>
-        <div className="p-3 border-t border-subtle space-y-1 hidden md:block">
-          <button
-            onClick={toggle}
-            className="nav-link w-full text-left"
-          >
-            <span>{theme === 'apple' ? '🍎' : '🎨'}</span>
-            <span>{theme === 'apple' ? 'Classic' : 'Premium'}</span>
-          </button>
+        <div className="p-2 border-t border-subtle space-y-0.5 hidden md:block">
           <a href="/t/face-runner" target="_blank" rel="noreferrer" className="nav-link">
-            <span>🎮</span> Open Game
+            <span>🎮</span> Game
           </a>
-          <a href="http://localhost:4000/_/admin/" target="_blank" rel="noreferrer" className="nav-link">
-            <span>🗄</span> TrailBase
-          </a>
+          {import.meta.env.VITE_TRAILBASE_URL && (
+            <a href={(import.meta.env.VITE_TRAILBASE_URL || '').replace(/\/+$/, '') + '/_/admin/'} target="_blank" rel="noreferrer" className="nav-link">
+              <span>🗄</span> TrailBase
+            </a>
+          )}
         </div>
       </aside>
-      <main className="flex-1 overflow-auto animate-fade-in ml-14 md:ml-56 p-5 md:p-6">
+      <main className="flex-1 overflow-auto ml-14 md:ml-56 p-4 md:p-5">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/captures" element={<Captures />} />

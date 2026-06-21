@@ -11,9 +11,8 @@ export default function Locations() {
 
   const refresh = useCallback(async () => {
     try {
-      const q = sessionFilter ? `?session=${sessionFilter}` : ''
-      const r = await fetch('/api/locations' + q)
-      setLocations(await r.json())
+      const data = await api.locations(0, 200, sessionFilter)
+      setLocations(data)
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }, [sessionFilter])
@@ -25,7 +24,7 @@ export default function Locations() {
   useEffect(() => {
     refresh()
     if (autoRefresh) {
-      const timer = setInterval(refresh, 5000)
+      const timer = setInterval(refresh, 15000)
       return () => clearInterval(timer)
     }
   }, [refresh, autoRefresh])

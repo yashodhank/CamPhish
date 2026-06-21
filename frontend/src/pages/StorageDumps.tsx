@@ -54,13 +54,7 @@ export default function StorageDumps() {
   const fetchData = useCallback(async (append = false) => {
     try {
       setError(null)
-      const params = new URLSearchParams()
-      if (sessionFilter) params.set('session', sessionFilter)
-      params.set('offset', String(append ? offset : 0))
-      params.set('limit', String(LIMIT))
-      const r = await fetch('/api/storage?' + params.toString())
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      const data: StorageDump[] = await r.json()
+      const data = await api.storage(append ? offset : 0, LIMIT, sessionFilter)
       if (append) {
         setDumps(prev => [...prev, ...data])
       } else {
