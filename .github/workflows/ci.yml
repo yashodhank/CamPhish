@@ -53,7 +53,7 @@ jobs:
             exit 1
           fi
       - name: Check recon.js exists
-        run: test -f templates/recon.js && echo "✓ recon.js exists" || (echo "ERROR: recon.js missing" && exit 1)
+        run: 'test -f templates/recon.js && echo "✓ recon.js exists" || (echo "ERROR: recon.js missing" && exit 1)'
 
   build-docker:
     needs: [check-rust, check-frontend]
