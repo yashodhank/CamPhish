@@ -25,8 +25,14 @@ Target Browser → CamPhish App (Rust :8080) → SQLite (primary) + TrailBase (:
 9. **Social media templates capture credentials** via `POST /api/capture/credentials`
 10. **Variable naming in JS**: use `el` prefix for DOM elements (elScore, elCombo) to avoid collisions with game state vars
 11. **ALWAYS rebuild Docker after merging backend changes**: run `docker compose build app && docker compose up -d app && sleep 5 && ./scripts/docker-code.sh`
-12. **ALWAYS show the access code** after any Docker restart: run `./scripts/docker-code.sh` to display the current code, or check `data/.access_code`
+12. **ALWAYS show the access code + tunnel URL** after any Docker restart:
+    - Access code: `./scripts/docker-code.sh` or `cat data/.access_code`
+    - Tunnel URL: `docker compose logs cloudflared | grep -oE 'https://[a-z0-9-]+\.try\.cloudflare\.com' | tail -1`
+    - Full summary: `./scripts/docker-start.sh` prints both in a summary banner
 13. **Dashboard access code persists**: written to `data/.access_code` (bind-mounted, survives restarts). Set `CAMPHISH_ACCESS_SEED` in `.env` for a deterministic code. Use `http://localhost:8080/?code=<code>` to access the dashboard, or `cat data/.access_code` to retrieve it.
+14. **Tunnel URL must be shown after every deployment**: the tunnel URL is critical for creating target links. After any `docker compose up`, extract and display the public URL (cloudflare or ngrok) alongside the access code.
+15. **ALWAYS use the latest Docker image for remote deployments**: production deployments should reference specific semver tags (`ghcr.io/yashodhank/camphish:v2.1.0`), not `latest` or `nightly`.
+16. **Coolify magic envs are auto-injected**: never manually set `SERVICE_FQDN_*` or `SERVICE_PASSWORD_*` — Coolify injects them.
 
 ## Tech Stack
 - Backend: Rust 1.96, axum 0.7, sqlx 0.8 (SQLite WAL), tower-http, reqwest (rustls)
@@ -54,6 +60,13 @@ docker compose up -d app
 
 # Clean up everything (containers + volumes + local data)
 ./scripts/docker-cleanup.sh
+
+# ====== STANDALONE (no panel) ======
+docker compose -f docker-compose.standalone.yml up -d
+docker compose -f docker-compose.standalone.yml -f docker-compose.caddy.yml up -d  # with HTTPS
+
+# ====== COOLIFY ======
+# docker-compose.coolify.yml is deployed via Coolify dashboard (Docker Compose build pack)
 \`\`\`
 
 ## Key File Locations
@@ -61,8 +74,68 @@ docker compose up -d app
 - Frontend: `frontend/src/{App.tsx, api/client.ts, pages/*.tsx}`
 - Templates: `templates/*.html` + `templates/recon.js`
 - Schema: `backend/migrations/001_init.sql` + `trailbase/schema/V7__camphish.sql`
-- Docker: `Dockerfile` (multi-stage Alpine) + `docker-compose.yml`
-- Scripts: `scripts/docker-start.sh` (auto tunnel) + `scripts/docker-cleanup.sh` (full reset)
+- Docker: `Dockerfile` (multi-stage Alpine) + `docker-compose.yml` (local+tunnels)
+- Docker Deploy: `docker-compose.coolify.yml` + `docker-compose.standalone.yml` + `docker-compose.caddy.yml`
+- CI/CD: `.github/workflows/ci.yml` + `.github/workflows/release.yml`
+- Scripts: `scripts/docker-start.sh` (auto tunnel) + `scripts/docker-cleanup.sh` (full reset) + `scripts/docker-code.sh`
+
+## Deployment Modes
+
+### Mode 1: Local Dev with Tunnels (docker-compose.yml)
+- Uses cloudflared or ngrok for public exposure
+- TrailBase included for admin UI + realtime
+- Bind-mounts templates for hot-reload
+- Run with `./scripts/docker-start.sh`
+
+### Mode 2: Coolify v4+ (docker-compose.coolify.yml)
+- Deployed via Coolify dashboard — Docker Compose build pack
+- No tunnel service — Coolify's Traefik/Caddy proxy handles external access + SSL
+- Uses `SERVICE_FQDN_CAMPHISH_8080` magic env for auto FQDN
+- Uses `SERVICE_PASSWORD_CAMPHISH_ACCESS` magic env for auto access code
+- Recommended for panel-managed deployments
+- See `docs/coolify-deployment.md` for full guide
+
+### Mode 3: Standalone (docker-compose.standalone.yml)
+- No panel, no tunnel — just the app
+- User provides own reverse proxy (nginx, Caddy, Traefik)
+- Companion `docker-compose.caddy.yml` for auto HTTPS via Caddy + Let's Encrypt
+- Recommended for VPS or self-managed servers
+- See `docs/standalone-deployment.md` for full guide
+
+## GitHub Actions CI/CD
+
+### CI Pipeline (.github/workflows/ci.yml)
+Triggers on push/PR to master and feature branches:
+1. **check-rust**: `cargo check` on backend
+2. **check-frontend**: TypeScript type-check on frontend
+3. **check-templates**: Validate template count and recon.js existence
+4. **build-docker**: Build Docker image (no push)
+5. **build-push-sha**: On master push, push SHA-tagged + `nightly` images to GHCR
+
+### Release Pipeline (.github/workflows/release.yml)
+Triggers on master push or manual dispatch:
+1. **version**: Auto-increments patch version, bumps Cargo.toml/package.json/Dockerfile, creates git tag
+2. **build-and-push**: Native multi-arch (amd64 + arm64) build + push to `ghcr.io/yashodhank/camphish`
+   - Tags: `latest`, `vX.Y.Z`, `vX.Y`, `<commit-sha>`
+   - Uses QEMU + native ARM runners for fast builds
+3. **merge-manifest**: Creates multi-arch manifest for each tag
+4. **Create GitHub Release**: Auto-generates release notes from commit log
+
+### Image Tags
+| Tag | When | Use |
+|-----|------|-----|
+| `latest` | Master branch push | Dev/test convenience |
+| `vX.Y.Z` | Git tag push | Immutable production reference |
+| `vX.Y` | Git tag push | Minor version alias |
+| `nightly` | Master branch push | Nightly testing |
+| `<sha>` | Master branch push | Commit traceability |
+
+### Remote Deployment
+Production deployments should reference specific semver tags:
+\`\`\`yaml
+image: ghcr.io/yashodhank/camphish:v2.1.0
+\`\`\`
+Never use `latest` or `nightly` for production.
 
 ## Capture Endpoints
 - `POST /api/capture/ip` — IP + User-Agent
