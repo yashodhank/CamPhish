@@ -1,29 +1,47 @@
-FROM php:8.2-apache
+FROM node:20-alpine AS frontend
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
-    unzip \
-    curl \
-    jq \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+FROM rust:1.96-alpine AS backend
+WORKDIR /app
+RUN apk add --no-cache musl-dev gcc
+COPY backend/ ./
+RUN cargo build --release && ls -lh target/release/camphish
 
-RUN a2enmod rewrite headers
+FROM alpine:3.20
+ARG VERSION=2.1.0
+LABEL org.opencontainers.image.title="CamPhish"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.description="CamPhish v2 — Rust + React red team camera capture tool"
+LABEL org.opencontainers.image.source="https://github.com/yashodhank/CamPhish"
+LABEL org.opencontainers.image.licenses="MIT"
 
-COPY docker/apache-vhost.conf /etc/apache2/sites-available/000-default.conf
-COPY docker/php.ini /usr/local/etc/php/conf.d/camphish.ini
+RUN apk add --no-cache ca-certificates curl
 
-RUN mkdir -p /var/www/html/templates /data/captures /data/locations /data/logs /data/config \
-    && chown -R www-data:www-data /var/www/html /data \
-    && chmod -R 755 /var/www/html /data
+WORKDIR /app
+COPY --from=backend /app/target/release/camphish /app/camphish
+COPY --from=backend /app/migrations /app/migrations
+COPY --from=frontend /app/dist /app/frontend/dist
+COPY templates/ /app/templates/
 
-COPY app/public/ /var/www/html/
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+ENV DATA_DIR=/app/data
+ENV TEMPLATES_DIR=/app/templates
+ENV FRONTEND_DIR=/app/frontend/dist
+ENV LISTEN_ADDR=0.0.0.0:8080
+ENV DATABASE_URL=sqlite:///app/data/camphish.db?mode=rwc
+ENV VERSION=${VERSION}
+ENV RUST_LOG=info
+ENV GRACEFUL_SHUTDOWN=true
+ENV ENABLE_COMPRESSION=true
+ENV ENABLE_TEMPLATE_CACHE=true
 
-VOLUME ["/data/captures", "/data/locations", "/data/logs", "/data/config"]
+EXPOSE 8080
+VOLUME ["/app/data"]
 
-EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
+    CMD curl -f http://localhost:8080/api/health || exit 1
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["apache2-foreground"]
+CMD ["/app/camphish"]

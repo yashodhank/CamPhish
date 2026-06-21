@@ -2,6 +2,10 @@
 
 **Audience:** Software Engineers, Contributors, Security Researchers
 
+> ⚠️ **This document describes the legacy v3 PHP-based architecture (Apache + PHP + Heroku).**
+> The current version (v2.1) is a Rust (axum) + React (Vite/TypeScript/TailwindCSS) stack with Docker.
+> Refer to the [Architecture Guide](./ARCHITECTURE.md) for the current stack, or check the [README](../README.md) for quick start.
+
 ---
 
 ## Table of Contents

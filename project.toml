@@ -1,8 +1,8 @@
 [_]
 schema-version = "0.2"
-id = "net.techchip.camphish"
+id = "net.camphish.v2"
 name = "CamPhish"
-version = "3.0.0"
+version = "2.0.0"
 authors = ["TechChip"]
 documentation-url = "https://github.com/yashodhank/CamPhish"
 source-url = "https://github.com/yashodhank/CamPhish"
@@ -10,14 +10,25 @@ source-url = "https://github.com/yashodhank/CamPhish"
 [[_.licenses]]
 type = "MIT"
 
+[_.metadata]
+architecture = "Rust (axum) + React (Vite) + SQLite"
+features = ["self-healing", "self-optimizing", "pack-buildpacks", "auto-versioning"]
+template_system = "pluggable"
+api = "RESTful JSON"
+
 [io.buildpacks]
 builder = "heroku/builder:24"
 
-[[io.buildpacks.build.env]]
-name = "HEROKU_PHP_DEFAULT_WEB"
-value = "apache2"
+[[io.buildpacks.group]]
+id = "heroku/rust"
+version = "latest"
 
-[_.metadata]
-deployment_modes = ["local", "self-hosted", "coolify", "cloudflare"]
-tunnel_options = ["ngrok", "cloudflared", "none"]
-proxy_options = ["caddy", "traefik", "nginx"]
+[[io.buildpacks.build.env]]
+name = "RUSTUP_MAX_RETRIES"
+value = "3"
+
+[_.metadata.release]
+strategy = "semantic-versioning"
+auto_tag = true
+changelog = true
+container_registry = "ghcr.io/yashodhank/camphish"

@@ -2,6 +2,10 @@
 
 **Audience:** Penetration Testers, Security Researchers, End Users
 
+> ⚠️ **This document describes the legacy v3 PHP-based architecture (Apache + PHP + Heroku).**
+> The current version (v2.1) is a Rust (axum) + React (Vite/TypeScript/TailwindCSS) stack with Docker.
+> For the current user workflow, see the [Red Team Playbook](./RED-TEAM-PLAYBOOK.md) or check the [README](../README.md).
+
 ---
 
 ## Table of Contents

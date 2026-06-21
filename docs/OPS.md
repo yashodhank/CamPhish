@@ -2,6 +2,10 @@
 
 **Audience:** DevOps Engineers, SREs, System Administrators
 
+> ⚠️ **This document describes the legacy v3 PHP-based architecture (Apache + PHP + Heroku).**
+> The current version (v2.1) runs on Rust (axum) in Docker (Alpine 3.20) with SQLite + optional TrailBase.
+> For current ops procedures, see the [Architecture Guide](./ARCHITECTURE.md) or the `docker-compose.yml`.
+
 ---
 
 ## Table of Contents
