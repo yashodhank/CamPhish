@@ -34,6 +34,9 @@ pub struct AppState {
     pub version: String,
     pub rate_limiter: std::sync::Mutex<std::collections::HashMap<String, (u32, std::time::Instant)>>,
     pub http: reqwest::Client,
+    pub access_code: String,
+    pub recon_js_template: Option<String>,
+    pub external_api_limiter: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
 impl AppState {
@@ -141,6 +144,18 @@ async fn main() -> anyhow::Result<()> {
         .build()
         .unwrap_or_default();
 
+    // External API rate limiter: 1 permit = 1 request; 3 permits = 3 concurrent max
+    // ip-api.com allows 45 req/min; Nominatim 1 req/sec
+    let external_api_limiter = std::sync::Arc::new(tokio::sync::Semaphore::new(3));
+
+    let recon_path = format!("{}/recon.js", templates_dir);
+    let recon_js_template = std::fs::read_to_string(&recon_path).ok();
+
+    let access_code = auth::generate_access_code();
+    std::env::set_var("CAMPHISH_ACCESS_CODE", &access_code);
+    tracing::info!("🔐 Dashboard access code: {}", access_code);
+    tracing::info!("🔐 Dashboard URL: http://{}/?code={}", listen_addr, access_code);
+
     let state = Arc::new(AppState {
         pool: pool.clone(),
         data_dir: data_dir.clone(),
@@ -151,17 +166,12 @@ async fn main() -> anyhow::Result<()> {
         version: version.clone(),
         rate_limiter: std::sync::Mutex::new(std::collections::HashMap::new()),
         http,
+        access_code: access_code.clone(),
+        recon_js_template,
+        external_api_limiter,
     });
 
     templates::scan_and_register(&state).await?;
-
-    // ========================================================================
-    // Generate access code for dashboard protection
-    // ========================================================================
-    let access_code = auth::generate_access_code();
-    std::env::set_var("CAMPHISH_ACCESS_CODE", &access_code);
-    tracing::info!("🔐 Dashboard access code: {}", access_code);
-    tracing::info!("🔐 Dashboard URL: http://{}/?code={}", listen_addr, access_code);
 
     let allowed_origins = std::env::var("CORS_ORIGIN").unwrap_or_else(|_| "*".into());
     let cors = if allowed_origins == "*" {

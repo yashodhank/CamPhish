@@ -7,11 +7,10 @@ use heck::ToTitleCase;
 use std::sync::Arc;
 
 pub async fn scan_and_register(state: &Arc<AppState>) -> anyhow::Result<()> {
-    let entries = std::fs::read_dir(&state.templates_dir)?;
+    let mut entries = tokio::fs::read_dir(&state.templates_dir).await?;
     let now = chrono::Utc::now().timestamp();
 
-    for entry in entries {
-        let entry = entry?;
+    while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("html") {
             continue;
@@ -41,12 +40,14 @@ pub async fn serve_template(
     State(state): State<Arc<AppState>>,
     Path(template_id): Path<String>,
 ) -> Result<Response, StatusCode> {
-    // Increment served counter
-    let _ = sqlx::query("UPDATE templates SET total_served = total_served + 1 WHERE id = ?")
-        .bind(&template_id).execute(&state.pool).await;
-
     // Check cache first
     if let Some(cached) = state.get_cached_template(&template_id).await {
+        let pool = state.pool.clone();
+        let tid = template_id.clone();
+        tokio::spawn(async move {
+            let _ = sqlx::query("UPDATE templates SET total_served = total_served + 1 WHERE id = ?")
+                .bind(&tid).execute(&pool).await;
+        });
         let mut resp = Response::new(cached.into());
         resp.headers_mut().insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
         resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
@@ -70,7 +71,14 @@ pub async fn serve_template(
         }
     };
 
-    let html = std::fs::read_to_string(&file_path).map_err(|_| StatusCode::NOT_FOUND)?;
+    // Prevent path traversal outside templates_dir
+    let canonical = std::path::Path::new(&file_path).canonicalize().map_err(|_| StatusCode::BAD_REQUEST)?;
+    let templates_canonical = std::path::Path::new(&state.templates_dir).canonicalize().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !canonical.starts_with(&templates_canonical) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let html = tokio::fs::read_to_string(&file_path).await.map_err(|_| StatusCode::NOT_FOUND)?;
 
     let tunnel_link = std::env::var("TUNNEL_LINK").unwrap_or_default();
 
@@ -86,6 +94,13 @@ pub async fn serve_template(
 
     // Cache for future requests
     state.cache_template(&template_id, processed.clone()).await;
+
+    let pool = state.pool.clone();
+    let tid = template_id.clone();
+    tokio::spawn(async move {
+        let _ = sqlx::query("UPDATE templates SET total_served = total_served + 1 WHERE id = ?")
+            .bind(&tid).execute(&pool).await;
+    });
 
     let mut resp = Response::new(processed.into());
     resp.headers_mut().insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());

@@ -20,12 +20,16 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<()> {
     let sql = include_str!("../migrations/001_init.sql");
     sqlx::raw_sql(sql).execute(pool).await?;
 
-    // Column additions for geocoding — safe to rerun (SQLite ignores if exists)
+    // Column additions — safe to rerun (SQLite ignores ALTER TABLE if column exists)
     for stmt in [
         "ALTER TABLE locations ADD COLUMN address TEXT",
         "ALTER TABLE ip_logs ADD COLUMN city TEXT",
         "ALTER TABLE ip_logs ADD COLUMN country TEXT",
         "ALTER TABLE ip_logs ADD COLUMN geo_data TEXT",
+        "ALTER TABLE ip_logs ADD COLUMN languages TEXT",
+        "ALTER TABLE ip_logs ADD COLUMN cookie_enabled INTEGER",
+        "ALTER TABLE ip_logs ADD COLUMN do_not_track TEXT",
+        "ALTER TABLE ip_logs ADD COLUMN voice_languages TEXT",
         "ALTER TABLE storage_dumps ADD COLUMN ip_address TEXT",
         "CREATE INDEX IF NOT EXISTS idx_storage_created ON storage_dumps(created_at DESC)",
     ] {

@@ -58,19 +58,50 @@ CREATE TABLE IF NOT EXISTS ip_logs (
     is_vpn BOOLEAN DEFAULT FALSE,
     is_tor BOOLEAN DEFAULT FALSE,
     connection_type TEXT,
-    -- Red team: device fingerprint
+    -- Red team: device fingerprint (basic)
     screen_resolution TEXT,
     color_depth INTEGER,
     timezone TEXT,
+    timezone_offset INTEGER,
     language TEXT,
+    languages TEXT,
     platform TEXT,
+    pixel_ratio REAL,
     hardware_concurrency INTEGER,
     device_memory REAL,
-    battery_level REAL,
-    battery_charging BOOLEAN,
+    max_touch_points INTEGER,
+    cookie_enabled BOOLEAN,
+    do_not_track TEXT,
+    -- Red team: device fingerprint (advanced)
     canvas_fingerprint TEXT,
     webgl_fingerprint TEXT,
+    webgl_vendor TEXT,
+    webgl_renderer TEXT,
     font_list TEXT,
+    font_count INTEGER,
+    audio_sample_rate INTEGER,
+    -- Network
+    connection_downlink REAL,
+    connection_rtt INTEGER,
+    -- Battery
+    battery_level REAL,
+    battery_charging BOOLEAN,
+    -- Media devices
+    camera_count INTEGER,
+    microphone_count INTEGER,
+    -- Sensors
+    has_gyroscope BOOLEAN,
+    has_accelerometer BOOLEAN,
+    -- Speech
+    voice_count INTEGER,
+    voice_languages TEXT,
+    -- Gender prediction (populated by backend)
+    gender_prediction TEXT DEFAULT 'unknown',
+    gender_confidence REAL DEFAULT 0,
+    -- Geolocation (populated by background API calls)
+    city TEXT,
+    country TEXT,
+    geo_data TEXT,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     FOREIGN KEY (session_id) REFERENCES sessions(id)
 );

