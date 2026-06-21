@@ -1,0 +1,76 @@
+# CamPhish Standalone Deployment — Docker Compose
+# =============================================================================
+# For production deployments WITHOUT a panel like Coolify.
+# Use your own reverse proxy (nginx, Caddy, Traefik, or cloudflared tunnel)
+# in front of this service.
+#
+# Usage:
+#   docker compose -f docker-compose.standalone.yml up -d
+#
+# With HTTPS via Caddy reverse proxy:
+#   docker compose -f docker-compose.standalone.yml -f docker-compose.caddy.yml up -d
+# =============================================================================
+
+services:
+  camphish:
+    image: ghcr.io/yashodhank/camphish:latest
+    container_name: camphish-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"   # Bind localhost only — proxy in front
+    environment:
+      # Required — set the public URL so templates generate correct links
+      - TUNNEL_URL=${TUNNEL_URL:-http://localhost:8080}
+
+      # Application config
+      - DATA_DIR=/app/data
+      - TEMPLATES_DIR=/app/templates
+      - FRONTEND_DIR=/app/frontend/dist
+      - LISTEN_ADDR=0.0.0.0:8080
+      - RUST_LOG=${RUST_LOG:-info}
+      - GRACEFUL_SHUTDOWN=true
+      - ENABLE_COMPRESSION=true
+      - ENABLE_TEMPLATE_CACHE=true
+
+      # Dashboard access code — set for deterministic code, or leave blank for random
+      - CAMPHISH_ACCESS_SEED=${CAMPHISH_ACCESS_SEED:-}
+
+      # TrailBase (optional) — set URL and API key if using
+      - TRAILBASE_URL=${TRAILBASE_URL:-}
+      - TRAILBASE_API_KEY=${TRAILBASE_API_KEY:-}
+    volumes:
+      - camphish_data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # =========================================================================
+  # TrailBase — OPTIONAL. Remove this block if not needed.
+  # =========================================================================
+  # trailbase:
+  #   image: trailbase/trailbase:0.3.0
+  #   container_name: camphish-trailbase
+  #   restart: unless-stopped
+  #   ports:
+  #     - "127.0.0.1:4000:4000"
+  #   environment:
+  #     - ADDRESS=0.0.0.0:4000
+  #     - ADMIN_EMAIL=${TRAILBASE_ADMIN_EMAIL:-admin@camphish.local}
+  #     - ADMIN_PASSWORD=${TRAILBASE_ADMIN_PASSWORD:-changeme}
+  #   volumes:
+  #     - trailbase_data:/app/traildepot
+  #     - ./trailbase/schema:/schema:ro
+  #   entrypoint: ["/bin/sh", "-c", "mkdir -p /app/traildepot/migrations && cp /schema/*.sql /app/traildepot/migrations/ 2>/dev/null; exec /app/trail run"]
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -q --spider http://localhost:4000/_/admin/ || exit 1"]
+  #     interval: 15s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 30s
+
+volumes:
+  camphish_data:
+  # trailbase_data:
