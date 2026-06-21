@@ -38,7 +38,7 @@ export default function IpLogs() {
   useEffect(() => {
     refresh()
     if (autoRefresh) {
-      const timer = setInterval(refresh, 5000)
+      const timer = setInterval(refresh, 15000)
       return () => clearInterval(timer)
     }
   }, [refresh, autoRefresh])

@@ -21,6 +21,7 @@ export default function Captures() {
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [sort, setSort] = useState('newest')
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [deleting, setDeleting] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -33,7 +34,7 @@ export default function Captures() {
   useEffect(() => {
     refresh()
     if (autoRefresh) {
-      const timer = setInterval(refresh, 3000)
+      const timer = setInterval(refresh, 10000)
       return () => clearInterval(timer)
     }
   }, [refresh, autoRefresh])
@@ -48,8 +49,11 @@ export default function Captures() {
   const delAll = async () => {
     if (!confirm('Delete ALL captures?')) return
     if (!confirm('Are you absolutely sure? This cannot be undone.')) return
-    await api.deleteAllCaptures()
-    refresh()
+    setDeleting(true)
+    try {
+      await api.deleteAllCaptures()
+      refresh()
+    } catch { setDeleting(false) }
   }
 
   const isVideo = (ft: string) => ft.includes('video')
@@ -72,7 +76,7 @@ export default function Captures() {
           </button>
           <button onClick={refresh} className="select-apple cursor-pointer">⟳</button>
           {captures.length > 0 && (
-            <button onClick={delAll} className="select-apple cursor-pointer" style={{ color: 'var(--accent)' }}>🗑 All</button>
+            <button onClick={delAll} disabled={deleting} className={`select-apple cursor-pointer ${deleting ? 'opacity-50' : ''}`} style={{ color: 'var(--accent)' }}>🗑 {deleting ? 'Deleting...' : 'All'}</button>
           )}
         </div>
       </div>

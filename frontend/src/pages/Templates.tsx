@@ -4,12 +4,28 @@ import { api, Template } from '../api/client'
 export default function Templates() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.templates().then(setTemplates).catch(console.error).finally(() => setLoading(false))
+    api.templates()
+      .then(setTemplates)
+      .catch(e => setError(e instanceof Error ? e.message : 'Failed to load'))
+      .finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="flex justify-center py-20"><div className="spinner"></div></div>
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="text-4xl">⚠️</div>
+          <p className="text-sm text-tertiary">{error}</p>
+          <button onClick={() => { setLoading(true); setError(null); api.templates().then(setTemplates).catch(e => setError(e instanceof Error ? e.message : 'Failed to load')).finally(() => setLoading(false)) }} className="px-4 py-2 text-sm accent-bg accent radius-sm">Retry</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4 stagger">

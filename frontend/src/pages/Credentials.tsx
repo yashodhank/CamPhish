@@ -64,13 +64,7 @@ export default function Credentials() {
   const fetchData = useCallback(async (append = false) => {
     try {
       setError(null)
-      const params = new URLSearchParams()
-      if (sessionFilter) params.set('session', sessionFilter)
-      params.set('offset', String(append ? offset : 0))
-      params.set('limit', String(LIMIT))
-      const r = await fetch('/api/credentials?' + params.toString())
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      const data: Credential[] = await r.json()
+      const data = await api.credentials(append ? offset : 0, LIMIT, sessionFilter)
       if (append) {
         setCreds(prev => [...prev, ...data])
       } else {

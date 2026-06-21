@@ -1,31 +1,24 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
-type Theme = 'classic' | 'apple'
+type Theme = 'midnight' | 'terminal'
 
 interface ThemeCtx {
   theme: Theme
   toggle: () => void
 }
 
-const ThemeContext = createContext<ThemeCtx>({ theme: 'classic', toggle: () => {} })
+const ThemeContext = createContext<ThemeCtx>({ theme: 'midnight', toggle: () => {} })
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('camphish-theme')
-    if (saved === 'classic' || saved === 'apple') return saved
-    return 'classic'
-  })
+  const [theme] = useState<Theme>('midnight')
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('camphish-theme', theme)
-    document.documentElement.style.colorScheme = theme === 'apple' ? 'dark' : 'dark'
-  }, [theme])
-
-  const toggle = () => setTheme(t => (t === 'classic' ? 'apple' : 'classic'))
+    document.documentElement.setAttribute('data-theme', 'midnight')
+    document.documentElement.style.colorScheme = 'dark'
+  }, [])
 
   return (
-    <ThemeContext.Provider value={{ theme, toggle }}>
+    <ThemeContext.Provider value={{ theme, toggle: () => {} }}>
       {children}
     </ThemeContext.Provider>
   )
