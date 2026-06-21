@@ -42,7 +42,7 @@ pub async fn csrf_middleware(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    if req.method() == axum::http::Method::DELETE {
+    if matches!(req.method(), &axum::http::Method::POST | &axum::http::Method::PUT | &axum::http::Method::PATCH | &axum::http::Method::DELETE) {
         let has_csrf = req.headers()
             .get("X-CSRF-Token")
             .or_else(|| req.headers().get("X-Requested-With"))

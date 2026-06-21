@@ -10,13 +10,14 @@ echo ""
 
 # Stop and remove containers (including profile containers like cloudflared/ngrok)
 echo "[1/3] Stopping and removing containers..."
-docker compose down --remove-orphans --profile cloudflared --profile ngrok 2>/dev/null || true
+docker compose --profile cloudflared --profile ngrok down --remove-orphans 2>/dev/null || true
 echo "  ✅ Done"
 
 # Clean up Docker volumes
-echo "[2/3] Removing Docker volumes (camphish_data)..."
-docker volume rm camphish_camphish_data 2>/dev/null && echo "  ✅ camphish_data removed" || echo "  ⏭️  camphish_data not found"
-docker volume rm camphish_trailbase_data 2>/dev/null && echo "  ✅ trailbase_data removed" || echo "  ⏭️  trailbase_data not found"
+echo "[2/3] Removing Docker volumes..."
+for vol in $(docker volume ls -q | grep -E 'camphish.*(data|trailbase)'); do
+  docker volume rm "$vol" 2>/dev/null && echo "  ✅ $vol removed" || echo "  ⏭️  $vol not found"
+done
 
 # Clean up local data directory
 echo "[3/3] Cleaning local data directory..."

