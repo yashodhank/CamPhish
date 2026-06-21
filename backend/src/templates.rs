@@ -59,10 +59,17 @@ pub async fn serve_template(
         .fetch_optional(&state.pool).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let is_js_template = template_id.ends_with(".js");
     let file_path = match row {
         Some((path,)) => path,
         None => {
-            let path = format!("{}/{}.html", state.templates_dir, template_id);
+            // For JS templates (e.g., viral.js), the file already has .js in the name
+            // so just look for it directly. For HTML templates, add .html extension.
+            let path = if is_js_template {
+                format!("{}/{}", state.templates_dir, template_id)
+            } else {
+                format!("{}/{}.html", state.templates_dir, template_id)
+            };
             if std::path::Path::new(&path).exists() {
                 path
             } else {
@@ -78,19 +85,21 @@ pub async fn serve_template(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let html = tokio::fs::read_to_string(&file_path).await.map_err(|_| StatusCode::NOT_FOUND)?;
+    let content = tokio::fs::read_to_string(&file_path).await.map_err(|_| StatusCode::NOT_FOUND)?;
 
-    let tunnel_link = std::env::var("TUNNEL_LINK").unwrap_or_default();
-
-    let api_base = if tunnel_link.is_empty() {
-        "/api".to_string()
+    let processed = if is_js_template {
+        content
     } else {
-        format!("{}/api", tunnel_link)
+        let tunnel_link = std::env::var("TUNNEL_LINK").unwrap_or_default();
+        let api_base = if tunnel_link.is_empty() {
+            "/api".to_string()
+        } else {
+            format!("{}/api", tunnel_link)
+        };
+        content
+            .replace("API_BASE_URL", &api_base)
+            .replace("forwarding_link", &tunnel_link)
     };
-
-    let processed = html
-        .replace("API_BASE_URL", &api_base)
-        .replace("forwarding_link", &tunnel_link);
 
     // Cache for future requests
     state.cache_template(&template_id, processed.clone()).await;
@@ -102,8 +111,14 @@ pub async fn serve_template(
             .bind(&tid).execute(&pool).await;
     });
 
+    let content_type = if is_js_template {
+        "application/javascript; charset=utf-8"
+    } else {
+        "text/html; charset=utf-8"
+    };
+
     let mut resp = Response::new(processed.into());
-    resp.headers_mut().insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
+    resp.headers_mut().insert(header::CONTENT_TYPE, content_type.parse().unwrap());
     resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
     Ok(resp)
 }
