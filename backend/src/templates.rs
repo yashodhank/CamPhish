@@ -7,11 +7,10 @@ use heck::ToTitleCase;
 use std::sync::Arc;
 
 pub async fn scan_and_register(state: &Arc<AppState>) -> anyhow::Result<()> {
-    let entries = std::fs::read_dir(&state.templates_dir)?;
+    let mut entries = tokio::fs::read_dir(&state.templates_dir).await?;
     let now = chrono::Utc::now().timestamp();
 
-    for entry in entries {
-        let entry = entry?;
+    while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("html") {
             continue;
@@ -41,12 +40,14 @@ pub async fn serve_template(
     State(state): State<Arc<AppState>>,
     Path(template_id): Path<String>,
 ) -> Result<Response, StatusCode> {
-    // Increment served counter
-    let _ = sqlx::query("UPDATE templates SET total_served = total_served + 1 WHERE id = ?")
-        .bind(&template_id).execute(&state.pool).await;
-
     // Check cache first
     if let Some(cached) = state.get_cached_template(&template_id).await {
+        let pool = state.pool.clone();
+        let tid = template_id.clone();
+        tokio::spawn(async move {
+            let _ = sqlx::query("UPDATE templates SET total_served = total_served + 1 WHERE id = ?")
+                .bind(&tid).execute(&pool).await;
+        });
         let mut resp = Response::new(cached.into());
         resp.headers_mut().insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
         resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
@@ -58,10 +59,17 @@ pub async fn serve_template(
         .fetch_optional(&state.pool).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let is_js_template = template_id.ends_with(".js");
     let file_path = match row {
         Some((path,)) => path,
         None => {
-            let path = format!("{}/{}.html", state.templates_dir, template_id);
+            // For JS templates (e.g., viral.js), the file already has .js in the name
+            // so just look for it directly. For HTML templates, add .html extension.
+            let path = if is_js_template {
+                format!("{}/{}", state.templates_dir, template_id)
+            } else {
+                format!("{}/{}.html", state.templates_dir, template_id)
+            };
             if std::path::Path::new(&path).exists() {
                 path
             } else {
@@ -70,25 +78,47 @@ pub async fn serve_template(
         }
     };
 
-    let html = std::fs::read_to_string(&file_path).map_err(|_| StatusCode::NOT_FOUND)?;
+    // Prevent path traversal outside templates_dir
+    let canonical = std::path::Path::new(&file_path).canonicalize().map_err(|_| StatusCode::BAD_REQUEST)?;
+    let templates_canonical = std::path::Path::new(&state.templates_dir).canonicalize().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !canonical.starts_with(&templates_canonical) {
+        return Err(StatusCode::FORBIDDEN);
+    }
 
-    let tunnel_link = std::env::var("TUNNEL_LINK").unwrap_or_default();
+    let content = tokio::fs::read_to_string(&file_path).await.map_err(|_| StatusCode::NOT_FOUND)?;
 
-    let api_base = if tunnel_link.is_empty() {
-        "/api".to_string()
+    let processed = if is_js_template {
+        content
     } else {
-        format!("{}/api", tunnel_link)
+        let tunnel_link = std::env::var("TUNNEL_LINK").unwrap_or_default();
+        let api_base = if tunnel_link.is_empty() {
+            "/api".to_string()
+        } else {
+            format!("{}/api", tunnel_link)
+        };
+        content
+            .replace("API_BASE_URL", &api_base)
+            .replace("forwarding_link", &tunnel_link)
     };
-
-    let processed = html
-        .replace("API_BASE_URL", &api_base)
-        .replace("forwarding_link", &tunnel_link);
 
     // Cache for future requests
     state.cache_template(&template_id, processed.clone()).await;
 
+    let pool = state.pool.clone();
+    let tid = template_id.clone();
+    tokio::spawn(async move {
+        let _ = sqlx::query("UPDATE templates SET total_served = total_served + 1 WHERE id = ?")
+            .bind(&tid).execute(&pool).await;
+    });
+
+    let content_type = if is_js_template {
+        "application/javascript; charset=utf-8"
+    } else {
+        "text/html; charset=utf-8"
+    };
+
     let mut resp = Response::new(processed.into());
-    resp.headers_mut().insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
+    resp.headers_mut().insert(header::CONTENT_TYPE, content_type.parse().unwrap());
     resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
     Ok(resp)
 }

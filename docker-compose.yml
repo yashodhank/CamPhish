@@ -1,8 +1,9 @@
 services:
   # =========================================================================
-  # TrailBase — Data layer (DEPRECATED — schema exists for future use,
-  # but data operations go through SQLite. The Rust app does not write to
-  # TrailBase. Keep for admin UI access if desired.)
+  # TrailBase — Admin UI + realtime data layer
+  # Primary data goes through SQLite. TrailBase provides the admin dashboard
+  # at http://localhost:4000/_/admin/ and realtime subscriptions.
+  # Migrations in trailbase/schema/ (must be V7+ to avoid built-in V1-V6).
   # =========================================================================
   trailbase:
     image: trailbase/trailbase:0.3.0
@@ -19,11 +20,11 @@ services:
       - ./trailbase/schema:/schema:ro
     entrypoint: ["/bin/sh", "-c", "mkdir -p /app/traildepot/migrations && cp /schema/*.sql /app/traildepot/migrations/ 2>/dev/null; exec /app/trail run"]
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/_/admin/"]
-      interval: 10s
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:4000/_/admin/ || curl -sf http://localhost:4000/_/admin/"]
+      interval: 15s
       timeout: 5s
-      retries: 10
-      start_period: 20s
+      retries: 5
+      start_period: 30s
     networks:
       - camphish-net
 
@@ -50,11 +51,11 @@ services:
       - GRACEFUL_SHUTDOWN=true
       - ENABLE_COMPRESSION=true
       - ENABLE_TEMPLATE_CACHE=true
-      - TRAILBASE_URL=http://trailbase:4000
+      - TRAILBASE_URL=${TRAILBASE_URL:-}
       - TRAILBASE_API_KEY=${TRAILBASE_API_KEY:-}
     depends_on:
       trailbase:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
       interval: ${HEALTH_CHECK_INTERVAL:-30}s
