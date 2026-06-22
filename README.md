@@ -1,4 +1,4 @@
-# CamPhish v2.1.0
+# CamPhish v2.1.1
 
 **Red team camera capture tool — Rust backend + React dashboard + 18 pluggable templates**
 

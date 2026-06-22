@@ -66,6 +66,13 @@ export interface IpEntry {
   city: string | null
   country: string | null
   local_ip: string | null
+  screen_resolution: string | null
+  language: string | null
+  platform: string | null
+  timezone: string | null
+  gender_prediction: string | null
+  gender_confidence: number | null
+  fingerprint_data: Record<string, unknown> | null
   created_at: number
 }
 

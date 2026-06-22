@@ -5,6 +5,7 @@ use axum::{Json, Router};
 use serde::Serialize;
 use sqlx::SqlitePool;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
@@ -39,6 +40,7 @@ pub struct AppState {
     pub recon_js_template: Option<String>,
     pub external_api_limiter: std::sync::Arc<tokio::sync::Semaphore>,
     pub posthog: posthog::PostHog,
+    pub trailbase_healthy: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -103,11 +105,15 @@ async fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(format!("{}/captures", data_dir))?;
     std::fs::create_dir_all(format!("{}/locations", data_dir))?;
 
-    let version = std::env::var("VERSION").unwrap_or_else(|_| "2.1.0".into());
+    let version = std::env::var("VERSION").unwrap_or_else(|_| "2.1.1".into());
     tracing::info!("CamPhish v{} starting up...", version);
 
     let pool = db::init_pool(&database_url).await?;
     db::run_migrations(&pool).await?;
+
+    // Shared health flag for TrailBase (set by background task, read by health endpoint)
+    let trailbase_healthy = Arc::new(AtomicBool::new(trailbase.is_some()));
+    let tb_healthy = trailbase_healthy.clone();
 
     // Self-healing: periodic DB + TrailBase connectivity check + WAL checkpoint
     let pool_clone = pool.clone();
@@ -125,7 +131,9 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => tracing::error!("SQLite health FAILED: {}", e),
             }
             if let Some(ref tb) = tb_clone {
-                if tb.health().await {
+                let healthy = tb.health().await;
+                tb_healthy.store(healthy, Ordering::Relaxed);
+                if healthy {
                     tracing::debug!("TrailBase health: OK");
                 } else {
                     tracing::warn!("TrailBase health: FAILED — using SQLite fallback");
@@ -175,6 +183,7 @@ async fn main() -> anyhow::Result<()> {
         recon_js_template,
         external_api_limiter,
         posthog,
+        trailbase_healthy: trailbase_healthy.clone(),
     });
 
     templates::scan_and_register(&state).await?;
@@ -235,8 +244,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/captures/:id", get(api::get_capture).delete(api::delete_capture))
         .route("/api/captures/:id/file", get(api::serve_capture_file))
         .route("/api/locations", get(api::list_locations).delete(api::delete_all_locations))
+        .route("/api/locations/:id", delete(api::delete_location))
         .route("/api/ips", get(api::list_ips).delete(api::delete_all_ips))
+        .route("/api/ips/:id", delete(api::delete_ip))
         .route("/api/events", get(api::list_events).delete(api::delete_all_events))
+        .route("/api/events/:id", delete(api::delete_event))
         .route("/api/templates", get(api::list_templates))
         .route("/api/sessions", get(api::list_sessions).post(api::create_session))
         .route("/api/sessions/:id", get(api::get_session).delete(api::delete_session))
@@ -290,7 +302,7 @@ async fn main() -> anyhow::Result<()> {
 async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let uptime = START_TIME.get().map(|t| t.elapsed().as_secs()).unwrap_or(0);
     let db_connected = sqlx::query("SELECT 1").execute(&state.pool).await.is_ok();
-    let tb_connected = state.trailbase.as_ref().map(|_| true).unwrap_or(false);
+    let tb_connected = state.trailbase_healthy.load(Ordering::Relaxed);
 
     let status = if db_connected { "ok" } else { "degraded" };
 

@@ -15,7 +15,7 @@ echo "  ✅ Done"
 
 # Clean up Docker volumes
 echo "[2/3] Removing Docker volumes..."
-for vol in $(docker volume ls -q | grep -E 'camphish.*(data|trailbase)'); do
+for vol in $(docker volume ls -q | grep -E '^camphish.*(data|trailbase)'); do
   docker volume rm "$vol" 2>/dev/null && echo "  ✅ $vol removed" || echo "  ⏭️  $vol not found"
 done
 

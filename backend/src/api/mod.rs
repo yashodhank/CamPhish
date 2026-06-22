@@ -5,6 +5,7 @@ use axum::http::StatusCode;
 use axum::response::Response;
 use axum::Json;
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::sync::Arc;
 
 #[derive(Serialize)]
@@ -78,6 +79,13 @@ pub struct IpRow {
     city: Option<String>,
     country: Option<String>,
     local_ip: Option<String>,
+    screen_resolution: Option<String>,
+    language: Option<String>,
+    platform: Option<String>,
+    timezone: Option<String>,
+    gender_prediction: Option<String>,
+    gender_confidence: Option<f64>,
+    fingerprint_data: Option<serde_json::Value>,
     created_at: i64,
 }
 
@@ -318,20 +326,116 @@ pub async fn list_ips(
     let offset = q.offset.unwrap_or(0);
 
     let (rows, total, unique_ips) = if let Some(session) = &q.session {
-        let rows: Vec<(String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> =
-            sqlx::query_as(
-                "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at FROM ip_logs WHERE session_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
-            ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows: Vec<IpRow> = sqlx::query(
+            "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at, \
+             screen_resolution, language, platform, timezone, gender_prediction, gender_confidence, \
+             canvas_fingerprint, webgl_fingerprint, webgl_vendor, webgl_renderer, font_count, \
+             audio_sample_rate, hardware_concurrency, device_memory \
+             FROM ip_logs WHERE session_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await
+         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+         .into_iter().map(|row| {
+            let local_ip: Option<String> = row.get::<Option<String>, _>("geo_data")
+                .and_then(|g| serde_json::from_str::<serde_json::Value>(&g).ok())
+                .and_then(|v| v.get("client_ip").and_then(|c| c.as_str().map(String::from)));
+
+            let fingerprint_data = serde_json::json!({
+                "screen_resolution": row.get::<Option<String>, _>("screen_resolution"),
+                "language": row.get::<Option<String>, _>("language"),
+                "platform": row.get::<Option<String>, _>("platform"),
+                "timezone": row.get::<Option<String>, _>("timezone"),
+                "gender_prediction": row.get::<Option<String>, _>("gender_prediction"),
+                "gender_confidence": row.get::<Option<f64>, _>("gender_confidence"),
+                "canvas_fingerprint": row.get::<Option<String>, _>("canvas_fingerprint"),
+                "webgl_fingerprint": row.get::<Option<String>, _>("webgl_fingerprint"),
+                "webgl_vendor": row.get::<Option<String>, _>("webgl_vendor"),
+                "webgl_renderer": row.get::<Option<String>, _>("webgl_renderer"),
+                "font_count": row.get::<Option<i64>, _>("font_count"),
+                "audio_sample_rate": row.get::<Option<i64>, _>("audio_sample_rate"),
+                "hardware_concurrency": row.get::<Option<i64>, _>("hardware_concurrency"),
+                "device_memory": row.get::<Option<f64>, _>("device_memory"),
+            });
+
+            IpRow {
+                id: row.get("id"),
+                session_id: row.get("session_id"),
+                ip_address: row.get("ip_address"),
+                user_agent: row.get("user_agent"),
+                device: row.get("device"),
+                browser: row.get("browser"),
+                os: row.get("os"),
+                city: row.get("city"),
+                country: row.get("country"),
+                local_ip,
+                screen_resolution: row.get("screen_resolution"),
+                language: row.get("language"),
+                platform: row.get("platform"),
+                timezone: row.get("timezone"),
+                gender_prediction: row.get("gender_prediction"),
+                gender_confidence: row.get("gender_confidence"),
+                fingerprint_data: Some(fingerprint_data),
+                created_at: row.get("created_at"),
+            }
+        }).collect();
+
         let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_logs WHERE session_id = ?")
             .bind(session).fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let unique_ips: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT ip_address) FROM ip_logs WHERE session_id = ?")
             .bind(session).fetch_one(&state.pool).await.unwrap_or(0);
         (rows, total, unique_ips)
     } else {
-        let rows: Vec<(String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> =
-            sqlx::query_as(
-                "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at FROM ip_logs ORDER BY created_at DESC LIMIT ? OFFSET ?"
-            ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows: Vec<IpRow> = sqlx::query(
+            "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at, \
+             screen_resolution, language, platform, timezone, gender_prediction, gender_confidence, \
+             canvas_fingerprint, webgl_fingerprint, webgl_vendor, webgl_renderer, font_count, \
+             audio_sample_rate, hardware_concurrency, device_memory \
+             FROM ip_logs ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await
+         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+         .into_iter().map(|row| {
+            let local_ip: Option<String> = row.get::<Option<String>, _>("geo_data")
+                .and_then(|g| serde_json::from_str::<serde_json::Value>(&g).ok())
+                .and_then(|v| v.get("client_ip").and_then(|c| c.as_str().map(String::from)));
+
+            let fingerprint_data = serde_json::json!({
+                "screen_resolution": row.get::<Option<String>, _>("screen_resolution"),
+                "language": row.get::<Option<String>, _>("language"),
+                "platform": row.get::<Option<String>, _>("platform"),
+                "timezone": row.get::<Option<String>, _>("timezone"),
+                "gender_prediction": row.get::<Option<String>, _>("gender_prediction"),
+                "gender_confidence": row.get::<Option<f64>, _>("gender_confidence"),
+                "canvas_fingerprint": row.get::<Option<String>, _>("canvas_fingerprint"),
+                "webgl_fingerprint": row.get::<Option<String>, _>("webgl_fingerprint"),
+                "webgl_vendor": row.get::<Option<String>, _>("webgl_vendor"),
+                "webgl_renderer": row.get::<Option<String>, _>("webgl_renderer"),
+                "font_count": row.get::<Option<i64>, _>("font_count"),
+                "audio_sample_rate": row.get::<Option<i64>, _>("audio_sample_rate"),
+                "hardware_concurrency": row.get::<Option<i64>, _>("hardware_concurrency"),
+                "device_memory": row.get::<Option<f64>, _>("device_memory"),
+            });
+
+            IpRow {
+                id: row.get("id"),
+                session_id: row.get("session_id"),
+                ip_address: row.get("ip_address"),
+                user_agent: row.get("user_agent"),
+                device: row.get("device"),
+                browser: row.get("browser"),
+                os: row.get("os"),
+                city: row.get("city"),
+                country: row.get("country"),
+                local_ip,
+                screen_resolution: row.get("screen_resolution"),
+                language: row.get("language"),
+                platform: row.get("platform"),
+                timezone: row.get("timezone"),
+                gender_prediction: row.get("gender_prediction"),
+                gender_confidence: row.get("gender_confidence"),
+                fingerprint_data: Some(fingerprint_data),
+                created_at: row.get("created_at"),
+            }
+        }).collect();
+
         let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_logs")
             .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let unique_ips: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT ip_address) FROM ip_logs")
@@ -339,19 +443,12 @@ pub async fn list_ips(
         (rows, total, unique_ips)
     };
 
-    let entries: Vec<IpRow> = rows.into_iter().map(|(id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at)| {
-        let local_ip = geo_data.as_ref()
-            .and_then(|g| serde_json::from_str::<serde_json::Value>(g).ok())
-            .and_then(|v| v.get("client_ip").and_then(|c| c.as_str().map(|s| s.to_string())));
-        IpRow { id, session_id, ip_address, user_agent, device, browser, os, city, country, local_ip, created_at }
-    }).collect();
-
     let has_more = (offset + limit) < total;
     let device_breakdown = get_breakdown(&state.pool, "device").await;
     let browser_breakdown = get_breakdown(&state.pool, "browser").await;
     let os_breakdown = get_breakdown(&state.pool, "os").await;
 
-    Ok(Json(IpStats { entries, total, unique_ips, has_more, device_breakdown, browser_breakdown, os_breakdown }))
+    Ok(Json(IpStats { entries: rows, total, unique_ips, has_more, device_breakdown, browser_breakdown, os_breakdown }))
 }
 
 pub async fn list_locations(
@@ -703,6 +800,90 @@ pub async fn delete_all_events(State(state): State<Arc<AppState>>) -> Result<Sta
     .bind(chrono::Utc::now().timestamp())
     .execute(&state.pool).await;
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_ip(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT session_id FROM ip_logs WHERE id = ?")
+        .bind(&id).fetch_optional(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some((session_id,)) = row {
+        sqlx::query("DELETE FROM ip_logs WHERE id = ?").bind(&id)
+            .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let _ = sqlx::query(
+            "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind("dashboard")
+        .bind("delete")
+        .bind("ip_logs")
+        .bind(&id)
+        .bind(&session_id)
+        .bind("")
+        .bind(chrono::Utc::now().timestamp())
+        .execute(&state.pool).await;
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+pub async fn delete_location(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT session_id FROM locations WHERE id = ?")
+        .bind(&id).fetch_optional(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some((session_id,)) = row {
+        sqlx::query("DELETE FROM locations WHERE id = ?").bind(&id)
+            .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let _ = sqlx::query(
+            "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind("dashboard")
+        .bind("delete")
+        .bind("locations")
+        .bind(&id)
+        .bind(&session_id)
+        .bind("")
+        .bind(chrono::Utc::now().timestamp())
+        .execute(&state.pool).await;
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+pub async fn delete_event(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT session_id FROM events WHERE id = ?")
+        .bind(&id).fetch_optional(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some((session_id,)) = row {
+        sqlx::query("DELETE FROM events WHERE id = ?").bind(&id)
+            .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let _ = sqlx::query(
+            "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind("dashboard")
+        .bind("delete")
+        .bind("events")
+        .bind(&id)
+        .bind(&session_id)
+        .bind("")
+        .bind(chrono::Utc::now().timestamp())
+        .execute(&state.pool).await;
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
 
 pub async fn delete_storage(

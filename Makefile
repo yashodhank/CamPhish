@@ -10,7 +10,7 @@ export
 # Help
 # =========================================================================
 help:
-	@echo "CamPhish v3.0 — Pack Buildpacks + Docker"
+	@echo "CamPhish v2.1.1 — Pack Buildpacks + Docker"
 	@echo ""
 	@echo "BUILD (pack CLI):"
 	@echo "  make build          Build app OCI image with pack"
@@ -166,7 +166,7 @@ link:
 	@if [ "$(TUNNEL)" = "ngrok" ]; then \
 		curl -s http://localhost:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[0].public_url // "not ready"'; \
 	elif [ "$(TUNNEL)" = "cloudflared" ]; then \
-		docker compose logs cloudflared 2>/dev/null | grep -o 'https://[-0-9a-z]*\.trycloudflare.com' | tail -1 || echo "not ready"; \
+		docker compose logs cloudflared 2>/dev/null | grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.(try\.cloudflare\.com|cf)' | tail -1 || echo "not ready"; \
 	else \
 		echo "https://$(SUBDOMAIN).$(DOMAIN)"; \
 	fi

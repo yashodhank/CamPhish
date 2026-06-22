@@ -61,7 +61,7 @@ if [ "$TUNNEL" = "cloudflared" ]; then
     TUNNEL_URL=""
     for i in $(seq 1 60); do
         TUNNEL_URL=$(docker compose logs cloudflared 2>/dev/null \
-            | grep -oE 'https://[a-z0-9-]+\.try\.cloudflare\.com' \
+            | grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.(try\.cloudflare\.com|cf)' \
             | tail -1)
         if [ -n "$TUNNEL_URL" ]; then
             break

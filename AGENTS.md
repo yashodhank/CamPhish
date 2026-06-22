@@ -1,7 +1,7 @@
 # CamPhish — AI Agent Instructions
 
 ## Project Overview
-CamPhish v2.1.0 is a Rust (axum) + React (Vite/TS/Tailwind) red team camera capture tool.
+CamPhish v2.1.1 is a Rust (axum) + React (Vite/TS/Tailwind) red team camera capture tool.
 Backend serves API + dashboard SPA + pluggable HTML templates. TrailBase provides admin UI + realtime.
 
 ## Architecture
