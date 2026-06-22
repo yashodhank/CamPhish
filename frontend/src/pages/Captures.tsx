@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api, Capture } from '../api/client'
+import ConfirmDialog from '../components/ConfirmDialog'
 import ErrorBanner from '../components/ErrorBanner'
 
 function fmtSize(b: number) {
@@ -29,6 +30,8 @@ export default function Captures() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [dialog, setDialog] = useState<{ type: 'single', id: string } | { type: 'all' } | null>(null)
+  const [dialogBusy, setDialogBusy] = useState(false)
   const perPage = 60
 
   const refresh = useCallback(async () => {
@@ -62,20 +65,31 @@ export default function Captures() {
 
   const del = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm('Delete this capture?')) return
-    await api.deleteCapture(id)
-    refresh()
+    setDialog({ type: 'single', id })
   }
 
   const delAll = async () => {
-    if (!confirm('Delete ALL captures?')) return
-    if (!confirm('Are you absolutely sure? This cannot be undone.')) return
+    setDialog({ type: 'all' })
+  }
+
+  const confirmDelete = async () => {
+    if (!dialog) return
+    setDialogBusy(true)
     setDeleting(true)
     try {
-      await api.deleteAllCaptures()
+      if (dialog.type === 'single') {
+        await api.deleteCapture(dialog.id)
+      } else {
+        await api.deleteAllCaptures()
+      }
+      setDialog(null)
       await refresh()
-    } catch { /* handled by refresh */ }
-    finally { setDeleting(false) }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete')
+    } finally {
+      setDeleting(false)
+      setDialogBusy(false)
+    }
   }
 
   const isVideo = (ft: string) => ft.includes('video')
@@ -199,6 +213,19 @@ export default function Captures() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={dialog !== null}
+        title={dialog?.type === 'all' ? 'Delete all captures?' : 'Delete capture?'}
+        description={dialog?.type === 'all'
+          ? 'This will permanently remove every captured image and video. This action cannot be undone.'
+          : 'This capture will be permanently deleted.'}
+        confirmLabel={dialog?.type === 'all' ? 'Delete all' : 'Delete capture'}
+        tone="danger"
+        busy={dialogBusy}
+        onClose={() => { if (!dialogBusy) setDialog(null) }}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }

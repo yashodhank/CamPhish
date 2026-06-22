@@ -17,7 +17,6 @@ export function initPostHog() {
       maskTextSelector: '[data-ph-mask]',
     },
     loaded: (ph) => {
-      ph.opt_in_capturing()
       ph.register_for_session({ $camphish_version: '2.1.0' })
     },
   })

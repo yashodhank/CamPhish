@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, Session, Template } from '../api/client'
+import ConfirmDialog from '../components/ConfirmDialog'
 import ErrorBanner from '../components/ErrorBanner'
 
 export default function Sessions() {
@@ -12,6 +13,8 @@ export default function Sessions() {
   const [name, setName] = useState('')
   const [template, setTemplate] = useState('face-runner')
   const [search, setSearch] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [dialogBusy, setDialogBusy] = useState(false)
 
   const refresh = async () => {
     try {
@@ -37,10 +40,22 @@ export default function Sessions() {
   }
 
   const del = async (id: string) => {
-    if (id === 'default') { alert('Cannot delete default session'); return }
-    if (!confirm('Delete this session and all its data?')) return
-    await api.deleteSession(id)
-    refresh()
+    if (id === 'default') { setError('Cannot delete default session'); return }
+    setDeleteTarget(id)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDialogBusy(true)
+    try {
+      await api.deleteSession(deleteTarget)
+      setDeleteTarget(null)
+      await refresh()
+    } catch {
+      setError('Failed to delete session')
+    } finally {
+      setDialogBusy(false)
+    }
   }
 
   const filtered = useMemo(() => {
@@ -138,6 +153,17 @@ export default function Sessions() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete session?"
+        description="This will permanently remove the session and all related captures, events, locations, credentials, and storage data."
+        confirmLabel="Delete session"
+        tone="danger"
+        busy={dialogBusy}
+        onClose={() => { if (!dialogBusy) setDeleteTarget(null) }}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }

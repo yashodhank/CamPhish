@@ -35,13 +35,27 @@ export default function Locations() {
   const refresh = useCallback(async () => {
     try {
       setError(null)
-      const result = await api.locations(page * LIMIT, LIMIT, sessionFilter)
+      const result = await api.locations(0, LIMIT, sessionFilter)
       setLocations(result.entries)
       setTotal(result.total)
       setHasMore(result.has_more)
+      setPage(0)
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
-  }, [sessionFilter, page])
+  }, [sessionFilter])
+
+  const loadMore = async () => {
+    try {
+      setLoading(true)
+      const nextPage = page + 1
+      const result = await api.locations(nextPage * LIMIT, LIMIT, sessionFilter)
+      setLocations(prev => [...prev, ...result.entries])
+      setTotal(result.total)
+      setHasMore(result.has_more)
+      setPage(nextPage)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
+    finally { setLoading(false) }
+  }
 
   useEffect(() => {
     api.sessions().then(setSessions).catch(() => {})
@@ -241,7 +255,7 @@ export default function Locations() {
               </div>
             )
           })}
-          <LoadMoreButton hasMore={hasMore} loading={false} onLoad={() => setPage(p => p + 1)} />
+          <LoadMoreButton hasMore={hasMore} loading={loading} onLoad={loadMore} />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
