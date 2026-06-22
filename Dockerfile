@@ -23,7 +23,7 @@ LABEL org.opencontainers.image.description="CamPhish v2 — Rust + React red tea
 LABEL org.opencontainers.image.source="https://github.com/yashodhank/CamPhish"
 LABEL org.opencontainers.image.licenses="MIT"
 
-RUN apk add --no-cache ca-certificates curl
+RUN apk add --no-cache ca-certificates curl && adduser -D -H camphish
 
 WORKDIR /app
 COPY --from=backend /app/target/release/camphish /app/camphish
@@ -42,10 +42,13 @@ ENV GRACEFUL_SHUTDOWN=true
 ENV ENABLE_COMPRESSION=true
 ENV ENABLE_TEMPLATE_CACHE=true
 
+RUN mkdir -p /app/data && chown camphish:camphish /app/data
+
 EXPOSE 8080
 VOLUME ["/app/data"]
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
     CMD curl -f http://localhost:8080/api/health || exit 1
 
+USER camphish
 CMD ["/app/camphish"]
