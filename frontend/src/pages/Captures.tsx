@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api, Capture } from '../api/client'
+import ErrorBanner from '../components/ErrorBanner'
 
 function fmtSize(b: number) {
   if (b < 1024) return `${b} B`
@@ -18,18 +19,24 @@ function relTime(ts: number) {
 export default function Captures() {
   const [captures, setCaptures] = useState<Capture[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [sort, setSort] = useState('newest')
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [deleting, setDeleting] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const perPage = 60
 
   const refresh = useCallback(async () => {
     try {
-      const data = await api.captures(1, 60, sort)
+      setError(null)
+      const data = await api.captures(page, perPage, sort)
       setCaptures(data.captures)
-    } catch (e) { console.error(e) }
+      setTotalPages(Math.max(1, data.pages))
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
-  }, [sort])
+  }, [sort, page])
 
   useEffect(() => {
     refresh()
@@ -52,21 +59,26 @@ export default function Captures() {
     setDeleting(true)
     try {
       await api.deleteAllCaptures()
-      refresh()
-    } catch { setDeleting(false) }
+      await refresh()
+    } catch { /* handled by refresh */ }
+    finally { setDeleting(false) }
   }
 
   const isVideo = (ft: string) => ft.includes('video')
 
   return (
     <div className="space-y-4 stagger">
+      <ErrorBanner error={error} onDismiss={() => setError(null)} />
+
       <div className="flex items-center justify-between flex-wrap gap-3 animate-fade-in">
         <div>
           <h1 className="text-xl font-bold text-primary">Captures</h1>
-          <p className="text-sm text-tertiary mt-0.5">{captures.length} camera snapshots</p>
+          <p className="text-sm text-tertiary mt-0.5">
+            {error ? 'Error loading' : `${captures.length} camera snapshots`}
+          </p>
         </div>
         <div className="flex gap-2">
-          <select value={sort} onChange={e => setSort(e.target.value)} className="select-apple">
+          <select value={sort} onChange={e => { setSort(e.target.value); setPage(1) }} className="select-apple">
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
             <option value="largest">Largest</option>
@@ -74,7 +86,7 @@ export default function Captures() {
           <button onClick={() => setAutoRefresh(!autoRefresh)} className={`select-apple cursor-pointer ${autoRefresh ? 'accent-bg accent' : ''}`}>
             {autoRefresh ? '● Live' : 'Paused'}
           </button>
-          <button onClick={refresh} className="select-apple cursor-pointer">⟳</button>
+          <button onClick={() => { setLoading(true); refresh() }} className="select-apple cursor-pointer">⟳</button>
           {captures.length > 0 && (
             <button onClick={delAll} disabled={deleting} className={`select-apple cursor-pointer ${deleting ? 'opacity-50' : ''}`} style={{ color: 'var(--accent)' }}>🗑 {deleting ? 'Deleting...' : 'All'}</button>
           )}
@@ -83,6 +95,13 @@ export default function Captures() {
 
       {loading ? (
         <div className="flex justify-center py-20"><div className="spinner"></div></div>
+      ) : error ? (
+        <div className="empty-state animate-fade-in">
+          <div className="icon">⚠️</div>
+          <h3>Failed to load captures</h3>
+          <p>{error}</p>
+          <button onClick={() => { setLoading(true); refresh() }} className="inline-block mt-5 px-4 py-2 nav-link active">⟳ Retry</button>
+        </div>
       ) : captures.length === 0 ? (
         <div className="empty-state animate-fade-in">
           <div className="icon">📷</div>
@@ -125,19 +144,35 @@ export default function Captures() {
         </div>
       )}
 
+      {!loading && !error && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 py-4">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+            className="px-4 py-2 text-sm radius-sm transition-colors disabled:opacity-30"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>‹ Prev</button>
+          <span className="text-xs text-tertiary">Page {page} of {totalPages}</span>
+          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+            className="px-4 py-2 text-sm radius-sm transition-colors disabled:opacity-30"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>Next ›</button>
+        </div>
+      )}
+
       {lightbox !== null && captures[lightbox] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-scale-in" onClick={() => setLightbox(null)}
-          style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-scale-in"
+          onClick={() => setLightbox(null)}
+          onKeyDown={e => { if (e.key === 'Escape') setLightbox(null); if (e.key === 'ArrowLeft' && lightbox > 0) setLightbox(lightbox - 1); if (e.key === 'ArrowRight' && lightbox < captures.length - 1) setLightbox(lightbox + 1) }}
+          style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}
+          tabIndex={0} autoFocus>
           <button className="absolute top-4 right-6 text-white/60 hover:text-white text-4xl" onClick={() => setLightbox(null)}>×</button>
           {lightbox > 0 && <button className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-4xl" onClick={e => { e.stopPropagation(); setLightbox(lightbox - 1) }}>‹</button>}
           {lightbox < captures.length - 1 && <button className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-4xl" onClick={e => { e.stopPropagation(); setLightbox(lightbox + 1) }}>›</button>}
           {isVideo(captures[lightbox].file_type) ? (
             <video src={captures[lightbox].url} controls autoPlay className="max-w-[95%] max-h-[85vh] radius-card-lg" />
           ) : (
-            <img src={captures[lightbox].url} className="max-w-[95%] max-h-[85vh] radius-card-lg shadow-card-lg" />
+            <img src={captures[lightbox].url} onClick={e => e.stopPropagation()} className="max-w-[95%] max-h-[85vh] radius-card-lg shadow-card-lg" />
           )}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-secondary text-sm px-4 py-2 radius-card" style={{ backgroundColor: 'var(--bg-glass)' }}>
             {captures[lightbox].filename} · {fmtSize(captures[lightbox].file_size)} · {relTime(captures[lightbox].created_at)}
+            <button onClick={() => { const a = document.createElement('a'); a.href = captures[lightbox].url; a.download = captures[lightbox].filename; a.click() }} className="ml-3 text-accent hover:underline">⬇ Download</button>
           </div>
         </div>
       )}

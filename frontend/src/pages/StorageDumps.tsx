@@ -1,6 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { api, Session, StorageDump } from '../api/client'
 import { exportCSV } from '../utils/export'
+import { relativeTime } from '../utils/time'
+import ErrorBanner from '../components/ErrorBanner'
+import LoadMoreButton from '../components/LoadMoreButton'
+import SessionFilter from '../components/SessionFilter'
 
 function parseCookies(raw: string): { name: string; value: string }[] {
   if (!raw) return []
@@ -9,17 +13,6 @@ function parseCookies(raw: string): { name: string; value: string }[] {
     if (eq === -1) return { name: p.trim(), value: '' }
     return { name: p.slice(0, eq).trim(), value: p.slice(eq + 1).trim() }
   }).filter(c => c.name)
-}
-
-function relativeTime(ts: number): string {
-  const seconds = Math.floor(Date.now() / 1000 - ts)
-  if (seconds < 60) return `${seconds}s ago`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
 }
 
 function searchInDump(d: StorageDump, query: string): boolean {
@@ -151,14 +144,7 @@ export default function StorageDumps() {
 
   return (
     <div className="space-y-4 stagger">
-      {error && (
-        <div className="content-card border-0 !border-l-2" style={{ borderLeftColor: 'var(--accent)', backgroundColor: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
-          <div className="flex items-center justify-between">
-            <span className="text-sm" style={{ color: 'var(--accent)' }}>⚠ {error}</span>
-            <button onClick={() => setError(null)} className="text-xs text-tertiary hover:text-primary">✕</button>
-          </div>
-        </div>
-      )}
+      <ErrorBanner error={error} onDismiss={() => setError(null)} />
 
       <div className="flex items-center justify-between flex-wrap gap-3 animate-fade-in">
         <div>
@@ -195,12 +181,7 @@ export default function StorageDumps() {
       <div className="flex gap-2">
         <input type="text" placeholder="Search cookies, keys, values, IP, session..."
           value={search} onChange={e => setSearch(e.target.value)} className="input-apple" />
-        <select value={sessionFilter} onChange={e => setSessionFilter(e.target.value)} className="select-apple">
-          <option value="">All Sessions</option>
-          {sessions.map(s => (
-            <option key={s.id} value={s.id}>{s.name || s.id.substring(0, 16)}</option>
-          ))}
-        </select>
+        <SessionFilter sessions={sessions} value={sessionFilter} onChange={setSessionFilter} />
       </div>
 
       {filtered.length === 0 ? (
@@ -335,17 +316,7 @@ export default function StorageDumps() {
               )}
             </div>
           ))}
-          {hasMore && (
-            <div className="flex justify-center py-4">
-              <button onClick={loadMore} disabled={loadingMore}
-                className="px-6 py-2 rounded-lg text-sm transition-colors"
-                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}
-                onMouseEnter={e => (e.target as HTMLElement).style.opacity = '0.7'}
-                onMouseLeave={e => (e.target as HTMLElement).style.opacity = '1'}>
-                {loadingMore ? 'Loading...' : 'Load More'}
-              </button>
-            </div>
-          )}
+          <LoadMoreButton hasMore={hasMore} loading={loadingMore} onLoad={loadMore} />
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, EventRow, Session } from '../api/client'
+import LoadMoreButton from '../components/LoadMoreButton'
 
 function eventIcon(type: string) {
   const map: Record<string, string> = {
@@ -132,15 +133,7 @@ export default function SessionReplay() {
                 </div>
               )
             })}
-            {hasMore && (
-              <div className="flex justify-center py-4">
-                <button onClick={loadMore} disabled={loadingMore}
-                  className="px-6 py-2 rounded-lg text-sm"
-                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>
-                  {loadingMore ? 'Loading...' : 'Load More'}
-                </button>
-              </div>
-            )}
+            <LoadMoreButton hasMore={hasMore} loading={loadingMore} onLoad={loadMore} />
           </div>
         )}
       </div>

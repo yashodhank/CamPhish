@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api, Location, Session } from '../api/client'
 import { exportCSV } from '../utils/export'
+import LoadMoreButton from '../components/LoadMoreButton'
+import SessionFilter from '../components/SessionFilter'
 
 interface LocationCluster {
   session_id: string
@@ -121,13 +123,7 @@ export default function Locations() {
             className="select-apple cursor-pointer">
             {showGrouped ? '⊞ All' : '⊟ Grouped'}
           </button>
-          <select value={sessionFilter} onChange={e => { setSessionFilter(e.target.value); setPage(0) }}
-            className="select-apple">
-            <option value="">All Sessions</option>
-            {sessions.map(s => (
-              <option key={s.id} value={s.id}>{s.name || s.id.substring(0, 16)}</option>
-            ))}
-          </select>
+          <SessionFilter sessions={sessions} value={sessionFilter} onChange={v => { setSessionFilter(v); setPage(0) }} />
           <button onClick={() => setAutoRefresh(!autoRefresh)}
             className={`select-apple cursor-pointer ${autoRefresh ? 'accent-bg accent' : ''}`}>
             {autoRefresh ? '● Live' : 'Paused'}
@@ -263,14 +259,7 @@ export default function Locations() {
         </div>
       )}
 
-      {hasMore && (
-        <div className="flex justify-center py-4">
-          <button onClick={() => setPage(p => p + 1)} className="px-6 py-2 rounded-lg text-sm"
-            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>
-            Load More
-          </button>
-        </div>
-      )}
+      <LoadMoreButton hasMore={hasMore} loading={false} onLoad={() => setPage(p => p + 1)} />
     </div>
   )
 }
