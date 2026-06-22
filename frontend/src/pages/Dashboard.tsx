@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { api, Stats } from '../api/client'
 import ErrorBanner from '../components/ErrorBanner'
 
@@ -126,13 +127,13 @@ export default function Dashboard() {
         <div className="content-card">
           <h3 className="section-head">Quick actions</h3>
           <div className="grid grid-cols-2 gap-1.5">
-            <a href="/captures" className="nav-link active justify-center text-center">📷 Captures</a>
-            <a href="/locations" className="nav-link active justify-center text-center">📍 Locations</a>
-            <a href="/ips" className="nav-link active justify-center text-center">🌐 IPs</a>
-            <a href="/credentials" className="nav-link active justify-center text-center">🔑 Credentials</a>
-            <a href="/storage" className="nav-link active justify-center text-center">🍪 Storage</a>
-            <a href="/replay" className="nav-link active justify-center text-center">⚡ Replay</a>
-            <a href="/templates" className="nav-link active justify-center text-center">🎭 Templates</a>
+            <Link to="/captures" className="nav-link active justify-center text-center">📷 Captures</Link>
+            <Link to="/locations" className="nav-link active justify-center text-center">📍 Locations</Link>
+            <Link to="/ips" className="nav-link active justify-center text-center">🌐 IPs</Link>
+            <Link to="/credentials" className="nav-link active justify-center text-center">🔑 Credentials</Link>
+            <Link to="/storage" className="nav-link active justify-center text-center">🍪 Storage</Link>
+            <Link to="/replay" className="nav-link active justify-center text-center">⚡ Replay</Link>
+            <Link to="/templates" className="nav-link active justify-center text-center">🎭 Templates</Link>
             <a href="/t/face-runner" target="_blank" rel="noreferrer" className="nav-link active justify-center text-center">🎮 Game</a>
           </div>
         </div>

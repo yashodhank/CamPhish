@@ -32,6 +32,8 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<()> {
         "ALTER TABLE ip_logs ADD COLUMN voice_languages TEXT",
         "ALTER TABLE storage_dumps ADD COLUMN ip_address TEXT",
         "CREATE INDEX IF NOT EXISTS idx_storage_created ON storage_dumps(created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_cred_dedup ON credentials(session_id, ip_address, username, password, template_id)",
+        "DELETE FROM credentials WHERE id NOT IN (SELECT MIN(id) FROM credentials GROUP BY session_id, ip_address, username, password, template_id)",
     ] {
         let _ = sqlx::raw_sql(stmt).execute(pool).await;
     }

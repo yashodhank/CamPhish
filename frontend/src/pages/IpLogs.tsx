@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { api, IpEntry } from '../api/client'
+import { api, IpEntry, Session } from '../api/client'
+import ErrorBanner from '../components/ErrorBanner'
+import SessionFilter from '../components/SessionFilter'
 import LoadMoreButton from '../components/LoadMoreButton'
 
 function BarChart({ title, data, color }: { title: string; data: Record<string, number>; color: string }) {
@@ -41,6 +43,8 @@ export default function IpLogs() {
   const [total, setTotal] = useState(0)
   const [uniqueIps, setUniqueIps] = useState(0)
   const [breakdowns, setBreakdowns] = useState<{ device: Record<string, number>; browser: Record<string, number>; os: Record<string, number> } | null>(null)
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [selectedSession, setSelectedSession] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -50,11 +54,13 @@ export default function IpLogs() {
   const [loadingMore, setLoadingMore] = useState(false)
   const LIMIT = 50
 
+  useEffect(() => { api.sessions().then(setSessions).catch(() => {}) }, [])
+
   const refresh = useCallback(async (append = false) => {
     const off = append ? offsetRef.current : 0
     try {
       setError(null)
-      const result = await api.ips(off, LIMIT)
+      const result = await api.ips(off, LIMIT, selectedSession)
       if (append) {
         setEntries(prev => [...prev, ...result.entries])
       } else {
@@ -71,12 +77,15 @@ export default function IpLogs() {
   }, [])
 
   useEffect(() => {
+    setEntries([])
+    offsetRef.current = 0
+    setLoading(true)
     refresh()
     if (autoRefresh) {
       const timer = setInterval(() => refresh(), 15000)
       return () => clearInterval(timer)
     }
-  }, [refresh, autoRefresh])
+  }, [refresh, autoRefresh, selectedSession])
 
   const loadMore = () => {
     setLoadingMore(true)
@@ -93,27 +102,17 @@ export default function IpLogs() {
 
   if (loading) return <div className="flex justify-center py-20"><div className="spinner"></div></div>
 
-  if (error) {
-    return (
-      <div className="space-y-4">
-        <div className="empty-state animate-fade-in">
-          <div className="icon">⚠️</div>
-          <h3>Failed to load IP logs</h3>
-          <p>{error}</p>
-          <button onClick={() => { setLoading(true); refresh() }} className="inline-block mt-5 px-4 py-2 nav-link active">⟳ Retry</button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-4 stagger">
+      <ErrorBanner error={error} onDismiss={() => setError(null)} />
+
       <div className="flex items-center justify-between flex-wrap gap-3 animate-fade-in">
         <div>
           <h1 className="text-xl font-bold text-primary">IP Logs</h1>
           <p className="text-sm text-tertiary mt-0.5">{total} visits · {uniqueIps} unique IPs</p>
         </div>
         <div className="flex gap-2">
+          <SessionFilter sessions={sessions} value={selectedSession} onChange={v => { setSelectedSession(v); offsetRef.current = 0 }} />
           <button onClick={() => setAutoRefresh(!autoRefresh)} className={`select-apple cursor-pointer ${autoRefresh ? 'accent-bg accent' : ''}`}>
             {autoRefresh ? '● Live' : 'Paused'}
           </button>

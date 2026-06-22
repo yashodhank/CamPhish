@@ -316,7 +316,7 @@ var Fingerprint = {
       oscillator.start(0);
       fp.audio_sample_rate = ac.sampleRate;
       fp.audio_state = ac.state;
-      fp.audio_max_channel = ac.maxChannelCount;
+      fp.audio_max_channel = ac.destination.maxChannelCount;
       setTimeout(function(){ oscillator.stop(); ac.close(); }, 100);
     } catch(e) {}
 

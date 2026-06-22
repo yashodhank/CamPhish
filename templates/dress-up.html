@@ -100,7 +100,7 @@ el.appendChild(div);
 });
 }
 function updateOutfit(){
-document.getElementById('outfit').textContent=TOPS[selected.top]+'\n'+BOTS[selected.bot];
+document.getElementById('outfit').innerHTML=TOPS[selected.top]+'<br>'+BOTS[selected.bot];
 }
 function submit(){
 lookCount++;

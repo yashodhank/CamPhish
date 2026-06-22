@@ -5,6 +5,7 @@ use axum::http::header;
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::response::Response;
+use chrono::Datelike;
 use heck::ToTitleCase;
 use std::sync::Arc;
 
@@ -105,9 +106,25 @@ pub async fn serve_template(
         } else {
             format!("{}/api", forwarding_link)
         };
+        let month = chrono::Utc::now().month();
+        let fes_name = match month {
+            12 => "Merry Christmas",
+            10 | 11 => "Happy Diwali",
+            3 => "Happy Holi",
+            1 => "Happy New Year",
+            _ => "Happy Festival",
+        };
+        let yt_video = match month {
+            12 => "XPGM2fSb3dc",
+            1 => "FNmD9lVq72A",
+            2 => "nfs8NYgTnKI",
+            _ => "jNQXAC9IVRw",
+        };
         content
             .replace("API_BASE_URL", &api_base)
             .replace("forwarding_link", &forwarding_link)
+            .replace("fes_name", fes_name)
+            .replace("live_yt_tv", yt_video)
     };
 
     // Cache for future requests

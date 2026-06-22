@@ -116,9 +116,9 @@ export const api = {
   captures: (page = 1, perPage = 60, sort = 'newest') =>
     fetchJson<PaginatedCaptures>(`${API}/captures?page=${page}&per_page=${perPage}&sort=${sort}`),
   deleteCapture: (id: string) =>
-    fetch(`${API}/captures/${id}`, { method: 'DELETE', headers: csrfHeaders() }).then(r => { if (!r.ok) throw new Error('Delete failed'); return r.json() }),
+    fetch(`${API}/captures/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
   deleteAllCaptures: () =>
-    fetch(`${API}/captures`, { method: 'DELETE', headers: csrfHeaders() }).then(r => { if (!r.ok) throw new Error('Delete failed'); return r.json() }),
+    fetch(`${API}/captures`, { method: 'DELETE', headers: csrfHeaders() }),
   locations: (offset = 0, limit = 50, session = '') =>
     fetchJson<PaginatedResponse<Location>>(`${API}/locations?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
   deleteAllLocations: () => fetch(`${API}/locations`, { method: 'DELETE', headers: csrfHeaders() }),
@@ -135,7 +135,7 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify({ name, template_id: templateId })
-    }).then(r => r.json()),
+    }).then(r => { if (!r.ok) throw new Error('Failed to create session'); return r.json() }),
   deleteSession: (id: string) => fetch(`${API}/sessions/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
   credentials: (offset = 0, limit = 50, session = '') =>
     fetchJson<PaginatedResponse<Credential>>(`${API}/credentials?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
