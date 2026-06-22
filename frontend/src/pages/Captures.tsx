@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { api, Capture } from '../api/client'
 import ErrorBanner from '../components/ErrorBanner'
 
@@ -7,6 +7,7 @@ function fmtSize(b: number) {
   if (b < 1048576) return `${(b / 1024).toFixed(1)} KB`
   return `${(b / 1048576).toFixed(2)} MB`
 }
+
 function relTime(ts: number) {
   const diff = Date.now() / 1000 - ts
   if (diff < 10) return 'just now'
@@ -18,12 +19,14 @@ function relTime(ts: number) {
 
 export default function Captures() {
   const [captures, setCaptures] = useState<Capture[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [sort, setSort] = useState('newest')
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [deleting, setDeleting] = useState(false)
+  const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const perPage = 60
@@ -33,6 +36,7 @@ export default function Captures() {
       setError(null)
       const data = await api.captures(page, perPage, sort)
       setCaptures(data.captures)
+      setTotal(data.total)
       setTotalPages(Math.max(1, data.pages))
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
@@ -45,6 +49,16 @@ export default function Captures() {
       return () => clearInterval(timer)
     }
   }, [refresh, autoRefresh])
+
+  const filtered = useMemo(() => {
+    if (!search) return captures
+    const q = search.toLowerCase()
+    return captures.filter(c =>
+      c.filename.toLowerCase().includes(q)
+      || c.file_type.toLowerCase().includes(q)
+      || c.session_id.toLowerCase().includes(q)
+    )
+  }, [captures, search])
 
   const del = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -74,7 +88,8 @@ export default function Captures() {
         <div>
           <h1 className="text-xl font-bold text-primary">Captures</h1>
           <p className="text-sm text-tertiary mt-0.5">
-            {error ? 'Error loading' : `${captures.length} camera snapshots`}
+            {total} snapshot{total !== 1 ? 's' : ''}
+            {filtered.length < captures.length ? ` · ${filtered.length} shown` : ''}
           </p>
         </div>
         <div className="flex gap-2">
@@ -93,6 +108,14 @@ export default function Captures() {
         </div>
       </div>
 
+      <input
+        type="text"
+        placeholder="Search by filename, type, or session ID..."
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        className="input-apple"
+      />
+
       {loading ? (
         <div className="flex justify-center py-20"><div className="spinner"></div></div>
       ) : error ? (
@@ -102,58 +125,58 @@ export default function Captures() {
           <p>{error}</p>
           <button onClick={() => { setLoading(true); refresh() }} className="inline-block mt-5 px-4 py-2 nav-link active">⟳ Retry</button>
         </div>
-      ) : captures.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="empty-state animate-fade-in">
-          <div className="icon">📷</div>
-          <h3>No captures yet</h3>
-          <p>Send the game link to a target. Captures appear here in real-time.</p>
-          <a href="/t/face-runner" target="_blank" rel="noreferrer" className="inline-block mt-5 px-4 py-2 nav-link active">🎮 Open Game</a>
+          <div className="icon">{search ? '🔍' : '📷'}</div>
+          <h3>{search ? 'No matches' : 'No captures yet'}</h3>
+          <p>{search ? 'Try a different search term' : 'Send the game link to a target. Captures appear here in real-time.'}</p>
+          {!search && <a href="/t/face-runner" target="_blank" rel="noreferrer" className="inline-block mt-5 px-4 py-2 nav-link active">🎮 Open Game</a>}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {captures.map((c, i) => {
-            const recent = Date.now() / 1000 - c.created_at < 30
-            return (
-              <div
-                key={c.id}
-                onClick={() => setLightbox(i)}
-                className={`group relative bg-secondary border-subtle radius-card overflow-hidden cursor-pointer transition-all duration-200 animate-scale-in hover:-translate-y-1 shadow-card ${
-                  recent ? 'shadow-card-lg' : ''
-                }`}
-                style={{ animationDelay: `${i * 0.03}s`, animationFillMode: 'both' }}
-              >
-                {isVideo(c.file_type) ? (
-                  <div className="h-32 flex items-center justify-center bg-primary text-4xl">🎬</div>
-                ) : (
-                  <img src={c.url} alt={c.filename} loading="lazy" className="h-32 w-full object-cover" />
-                )}
-                {recent && (
-                  <div className="absolute top-2 left-2 badge" style={{ background: 'var(--accent)', color: '#fff' }}>NEW</div>
-                )}
-                <button onClick={e => del(c.id, e)} className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500/90 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">×</button>
-                <div className="p-2.5">
-                  <div className="text-xs text-secondary truncate">{c.filename}</div>
-                  <div className="flex justify-between mt-1.5">
-                    <span className="text-[10px] text-tertiary">{relTime(c.created_at)}</span>
-                    <span className="text-[10px] text-tertiary mono">{fmtSize(c.file_size)}</span>
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {filtered.map((c, i) => {
+              const recent = Date.now() / 1000 - c.created_at < 30
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => setLightbox(captures.indexOf(c))}
+                  className={`group relative bg-secondary border-subtle radius-card overflow-hidden cursor-pointer transition-all duration-200 animate-scale-in hover:-translate-y-1 shadow-card ${recent ? 'shadow-card-lg' : ''}`}
+                  style={{ animationDelay: `${i * 0.03}s`, animationFillMode: 'both' }}
+                >
+                  {isVideo(c.file_type) ? (
+                    <div className="h-32 flex items-center justify-center bg-primary text-4xl">🎬</div>
+                  ) : (
+                    <img src={c.url} alt={c.filename} loading="lazy" className="h-32 w-full object-cover" />
+                  )}
+                  {recent && (
+                    <div className="absolute top-2 left-2 badge" style={{ background: 'var(--accent)', color: '#fff' }}>NEW</div>
+                  )}
+                  <button onClick={e => del(c.id, e)} className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500/90 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">×</button>
+                  <div className="p-2.5">
+                    <div className="text-xs text-secondary truncate">{c.filename}</div>
+                    <div className="flex justify-between mt-1.5">
+                      <span className="text-[10px] text-tertiary">{relTime(c.created_at)}</span>
+                      <span className="text-[10px] text-tertiary mono">{fmtSize(c.file_size)}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+              )
+            })}
+          </div>
 
-      {!loading && !error && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 py-4">
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
-            className="px-4 py-2 text-sm radius-sm transition-colors disabled:opacity-30"
-            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>‹ Prev</button>
-          <span className="text-xs text-tertiary">Page {page} of {totalPages}</span>
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
-            className="px-4 py-2 text-sm radius-sm transition-colors disabled:opacity-30"
-            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>Next ›</button>
-        </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-3 py-4">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                className="px-4 py-2 text-sm radius-sm transition-colors disabled:opacity-30"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>‹ Prev</button>
+              <span className="text-xs text-tertiary">Page {page} of {totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+                className="px-4 py-2 text-sm radius-sm transition-colors disabled:opacity-30"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>Next ›</button>
+            </div>
+          )}
+        </>
       )}
 
       {lightbox !== null && captures[lightbox] && (
