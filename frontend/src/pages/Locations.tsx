@@ -17,19 +17,25 @@ interface LocationCluster {
 export default function Locations() {
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [sessions, setSessions] = useState<Session[]>([])
   const [sessionFilter, setSessionFilter] = useState('')
   const [showGrouped, setShowGrouped] = useState(true)
   const [expandedSession, setExpandedSession] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+  const LIMIT = 50
 
   const refresh = useCallback(async () => {
     try {
-      const data = await api.locations(0, 200, sessionFilter)
-      setLocations(data)
-    } catch (e) { console.error(e) }
+      setError(null)
+      const result = await api.locations(page * LIMIT, LIMIT, sessionFilter)
+      setLocations(result.entries)
+      setHasMore(result.has_more)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
-  }, [sessionFilter])
+  }, [sessionFilter, page])
 
   useEffect(() => {
     api.sessions().then(setSessions).catch(() => {})
@@ -79,6 +85,19 @@ export default function Locations() {
 
   if (loading) return <div className="flex justify-center py-20"><div className="spinner"></div></div>
 
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <div className="empty-state animate-fade-in">
+          <div className="icon">⚠️</div>
+          <h3>Failed to load locations</h3>
+          <p>{error}</p>
+          <button onClick={() => { setLoading(true); refresh() }} className="inline-block mt-5 px-4 py-2 nav-link active">⟳ Retry</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4 stagger">
       <div className="flex items-center justify-between flex-wrap gap-3 animate-fade-in">
@@ -86,7 +105,7 @@ export default function Locations() {
           <h1 className="text-xl font-bold text-primary">Locations</h1>
           <p className="text-sm text-tertiary mt-0.5">
             {showGrouped
-              ? `${clusters.length} sessions · ${locations.length} total GPS coordinates`
+              ? `${clusters.length} sessions · ${locations.length} GPS coordinates`
               : `${locations.length} GPS coordinates`}
           </p>
         </div>
@@ -102,7 +121,7 @@ export default function Locations() {
             className="select-apple cursor-pointer">
             {showGrouped ? '⊞ All' : '⊟ Grouped'}
           </button>
-          <select value={sessionFilter} onChange={e => setSessionFilter(e.target.value)}
+          <select value={sessionFilter} onChange={e => { setSessionFilter(e.target.value); setPage(0) }}
             className="select-apple">
             <option value="">All Sessions</option>
             {sessions.map(s => (
@@ -154,7 +173,7 @@ export default function Locations() {
                   <div className="flex items-center gap-2 shrink-0">
                     {spread > 0.001 && (
                       <span className="text-[10px] text-tertiary bg-tertiary px-1.5 py-0.5 rounded">
-                        σ{spread.toFixed(5)}° spread
+                        σ{spread.toFixed(3)}° spread
                       </span>
                     )}
                     <span className="text-xs text-tertiary">{isExpanded ? '▲' : '▼'}</span>
@@ -241,6 +260,15 @@ export default function Locations() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {hasMore && (
+        <div className="flex justify-center py-4">
+          <button onClick={() => setPage(p => p + 1)} className="px-6 py-2 rounded-lg text-sm"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>
+            Load More
+          </button>
         </div>
       )}
     </div>

@@ -1,6 +1,15 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { api, Session, StorageDump } from '../api/client'
 import { exportCSV } from '../utils/export'
+
+function parseCookies(raw: string): { name: string; value: string }[] {
+  if (!raw) return []
+  return raw.split(';').map(p => {
+    const eq = p.indexOf('=')
+    if (eq === -1) return { name: p.trim(), value: '' }
+    return { name: p.slice(0, eq).trim(), value: p.slice(eq + 1).trim() }
+  }).filter(c => c.name)
+}
 
 function relativeTime(ts: number): string {
   const seconds = Math.floor(Date.now() / 1000 - ts)
@@ -45,52 +54,54 @@ export default function StorageDumps() {
   const [search, setSearch] = useState('')
   const [sessions, setSessions] = useState<Session[]>([])
   const [sessionFilter, setSessionFilter] = useState('')
-  const [offset, setOffset] = useState(0)
+  const offsetRef = useRef(0)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [paused, setPaused] = useState(false)
   const LIMIT = 50
 
-  const fetchData = useCallback(async (append = false) => {
+  const fetchData = useCallback(async (append = false, useOffset?: number) => {
+    const off = useOffset ?? (append ? offsetRef.current : 0)
     try {
       setError(null)
-      const data = await api.storage(append ? offset : 0, LIMIT, sessionFilter)
+      const result = await api.storage(off, LIMIT, sessionFilter)
       if (append) {
-        setDumps(prev => [...prev, ...data])
+        setDumps(prev => [...prev, ...result.entries])
       } else {
-        setDumps(data)
-        setOffset(0)
+        setDumps(result.entries)
       }
-      setHasMore(data.length >= LIMIT)
+      offsetRef.current = off + (append ? 0 : 0)
+      setHasMore(result.has_more)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [sessionFilter, offset])
+  }, [sessionFilter])
 
   useEffect(() => {
     api.sessions().then(setSessions).catch(() => {})
   }, [])
 
   useEffect(() => {
-    setOffset(0)
+    offsetRef.current = 0
     setDumps([])
     setLoading(true)
-    fetchData(false)
+    fetchData(false, 0)
   }, [sessionFilter, fetchData])
 
   useEffect(() => {
     if (paused) return
-    const t = setInterval(() => fetchData(false), 15000)
+    const t = setInterval(() => fetchData(false, 0), 15000)
     return () => clearInterval(t)
   }, [paused, sessionFilter, fetchData])
 
   const loadMore = () => {
     setLoadingMore(true)
-    setOffset(prev => prev + LIMIT)
-    fetchData(true)
+    const nextOffset = offsetRef.current + LIMIT
+    offsetRef.current = nextOffset
+    fetchData(true, nextOffset)
   }
 
   const toggleExpand = (id: string) => {
@@ -120,10 +131,13 @@ export default function StorageDumps() {
   }
 
   const handleDeleteAll = async () => {
+    if (!confirm('Delete ALL storage dumps?')) return
+    if (!confirm('Are you absolutely sure? This cannot be undone.')) return
     try {
       setError(null)
       await api.deleteAllStorage()
       setDumps([])
+      setHasMore(false)
     } catch (e) {
       setError('Failed to delete all')
     }
@@ -247,8 +261,21 @@ export default function StorageDumps() {
                           <div className="text-xs font-semibold uppercase mb-2 flex items-center gap-1.5" style={{ color: '#bf5af2' }}>
                             <span>🍪</span> Cookies <span className="text-tertiary font-normal lowercase">({d.data.cookie_count ?? 0})</span>
                           </div>
-                          <pre className="text-xs text-secondary bg-primary p-3 radius-card overflow-x-auto whitespace-pre-wrap break-all mono max-h-48 overflow-y-auto">{d.data.cookies || '(none)'}</pre>
-                          <button onClick={() => navigator.clipboard.writeText(d.data.cookies || '')}
+                          {typeof d.data.cookies === 'string' && d.data.cookies ? (
+                            <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                              {parseCookies(d.data.cookies).map((c, ci) => (
+                                <div key={ci} className="flex gap-2 text-xs items-start group bg-primary px-2.5 py-1.5 radius-sm border border-subtle/30">
+                                  <code className="mono shrink-0 max-w-[40%] truncate" style={{ color: '#bf5af2' }} title={c.name}>{c.name}</code>
+                                  <code className="mono text-secondary break-all flex-1 min-w-0 truncate" title={c.value}>{c.value || '—'}</code>
+                                  <button onClick={() => navigator.clipboard.writeText(`${c.name}=${c.value}`)}
+                                    className="text-tertiary hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-[10px]">📋</button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <pre className="text-xs text-secondary bg-primary p-3 radius-card overflow-x-auto whitespace-pre-wrap break-all mono max-h-48 overflow-y-auto">{typeof d.data.cookies === 'string' ? d.data.cookies : JSON.stringify(d.data.cookies, null, 2)}</pre>
+                          )}
+                          <button onClick={() => navigator.clipboard.writeText(typeof d.data.cookies === 'string' ? d.data.cookies : JSON.stringify(d.data.cookies, null, 2))}
                             className="mt-2 text-xs px-3 py-1.5 bg-tertiary text-secondary rounded-lg hover:text-primary transition-colors">📋 Copy Cookie String</button>
                         </div>
                       )}

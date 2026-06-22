@@ -21,6 +21,7 @@ mod api;
 mod auth;
 mod capture;
 mod db;
+mod posthog;
 mod templates;
 mod trailbase;
 
@@ -37,6 +38,7 @@ pub struct AppState {
     pub access_code: String,
     pub recon_js_template: Option<String>,
     pub external_api_limiter: std::sync::Arc<tokio::sync::Semaphore>,
+    pub posthog: posthog::PostHog,
 }
 
 impl AppState {
@@ -151,6 +153,8 @@ async fn main() -> anyhow::Result<()> {
     let recon_path = format!("{}/recon.js", templates_dir);
     let recon_js_template = std::fs::read_to_string(&recon_path).ok();
 
+    let posthog = posthog::PostHog::from_env().await;
+
     let access_code = auth::generate_access_code(&data_dir);
     std::env::set_var("CAMPHISH_ACCESS_CODE", &access_code);
     tracing::info!("🔐 Dashboard access code: {}", access_code);
@@ -170,6 +174,7 @@ async fn main() -> anyhow::Result<()> {
         access_code: access_code.clone(),
         recon_js_template,
         external_api_limiter,
+        posthog,
     });
 
     templates::scan_and_register(&state).await?;
@@ -229,9 +234,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/captures", get(api::list_captures).delete(api::delete_all_captures))
         .route("/api/captures/:id", get(api::get_capture).delete(api::delete_capture))
         .route("/api/captures/:id/file", get(api::serve_capture_file))
-        .route("/api/locations", get(api::list_locations))
-        .route("/api/ips", get(api::list_ips))
-        .route("/api/events", get(api::list_events))
+        .route("/api/locations", get(api::list_locations).delete(api::delete_all_locations))
+        .route("/api/ips", get(api::list_ips).delete(api::delete_all_ips))
+        .route("/api/events", get(api::list_events).delete(api::delete_all_events))
         .route("/api/templates", get(api::list_templates))
         .route("/api/sessions", get(api::list_sessions).post(api::create_session))
         .route("/api/sessions/:id", get(api::get_session).delete(api::delete_session))

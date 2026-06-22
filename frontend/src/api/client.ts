@@ -2,7 +2,10 @@ const API = '/api'
 
 async function fetchJson<T>(url: string): Promise<T> {
   const r = await fetch(url)
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
+  if (!r.ok) {
+    const body = await r.text().catch(() => '')
+    throw new Error(body ? `${r.status}: ${body.slice(0, 200)}` : `${r.status} ${r.statusText}`)
+  }
   return r.json()
 }
 
@@ -70,6 +73,7 @@ export interface IpStats {
   entries: IpEntry[]
   total: number
   unique_ips: number
+  has_more: boolean
   device_breakdown: Record<string, number>
   browser_breakdown: Record<string, number>
   os_breakdown: Record<string, number>
@@ -101,32 +105,44 @@ export interface EventRow {
   created_at: number
 }
 
+export interface PaginatedResponse<T> {
+  entries: T[]
+  total: number
+  has_more: boolean
+}
+
 export const api = {
   stats: () => fetchJson<Stats>(`${API}/stats`),
   captures: (page = 1, perPage = 60, sort = 'newest') =>
     fetchJson<PaginatedCaptures>(`${API}/captures?page=${page}&per_page=${perPage}&sort=${sort}`),
-  deleteCapture: (id: string) => fetch(`${API}/captures/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
-  deleteAllCaptures: () => fetch(`${API}/captures`, { method: 'DELETE', headers: csrfHeaders() }),
-  locations: (offset = 0, limit = 200, session = '') =>
-    fetchJson<Location[]>(`${API}/locations?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
-  ips: (offset = 0, limit = 500) => fetchJson<IpStats>(`${API}/ips?offset=${offset}&limit=${limit}`),
+  deleteCapture: (id: string) =>
+    fetch(`${API}/captures/${id}`, { method: 'DELETE', headers: csrfHeaders() }).then(r => { if (!r.ok) throw new Error('Delete failed'); return r.json() }),
+  deleteAllCaptures: () =>
+    fetch(`${API}/captures`, { method: 'DELETE', headers: csrfHeaders() }).then(r => { if (!r.ok) throw new Error('Delete failed'); return r.json() }),
+  locations: (offset = 0, limit = 50, session = '') =>
+    fetchJson<PaginatedResponse<Location>>(`${API}/locations?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
+  deleteAllLocations: () => fetch(`${API}/locations`, { method: 'DELETE', headers: csrfHeaders() }),
+  ips: (offset = 0, limit = 50, session = '') =>
+    fetchJson<IpStats>(`${API}/ips?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
+  deleteAllIps: () => fetch(`${API}/ips`, { method: 'DELETE', headers: csrfHeaders() }),
   templates: () => fetchJson<Template[]>(`${API}/templates`),
-  events: (session = 'default', offset = 0, limit = 500) =>
-    fetchJson<EventRow[]>(`${API}/events?session=${session}&offset=${offset}&limit=${limit}`),
+  events: (session = '', offset = 0, limit = 50) =>
+    fetchJson<PaginatedResponse<EventRow>>(`${API}/events?${session ? `session=${session}&` : ''}offset=${offset}&limit=${limit}`),
+  deleteAllEvents: () => fetch(`${API}/events`, { method: 'DELETE', headers: csrfHeaders() }),
   sessions: () => fetchJson<Session[]>(`${API}/sessions`),
-  createSession: (name: string, templateId: string) =>
+  createSession: (name: string, templateId: string): Promise<Session> =>
     fetch(`${API}/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify({ name, template_id: templateId })
     }).then(r => r.json()),
   deleteSession: (id: string) => fetch(`${API}/sessions/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
-  credentials: (offset = 0, limit = 200, session = '') =>
-    fetchJson<Credential[]>(`${API}/credentials?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
+  credentials: (offset = 0, limit = 50, session = '') =>
+    fetchJson<PaginatedResponse<Credential>>(`${API}/credentials?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
   deleteCredential: (id: string) => fetch(`${API}/credentials/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
   deleteAllCredentials: () => fetch(`${API}/credentials`, { method: 'DELETE', headers: csrfHeaders() }),
-  storage: (offset = 0, limit = 100, session = '') =>
-    fetchJson<StorageDump[]>(`${API}/storage?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
+  storage: (offset = 0, limit = 50, session = '') =>
+    fetchJson<PaginatedResponse<StorageDump>>(`${API}/storage?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
   deleteStorage: (id: string) => fetch(`${API}/storage/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
   deleteAllStorage: () => fetch(`${API}/storage`, { method: 'DELETE', headers: csrfHeaders() }),
 }

