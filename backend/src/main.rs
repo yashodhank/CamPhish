@@ -34,13 +34,16 @@ pub struct AppState {
     pub template_cache: tokio::sync::RwLock<std::collections::HashMap<String, String>>,
     pub trailbase: Option<trailbase::TrailBaseClient>,
     pub version: String,
-    pub rate_limiter: std::sync::Mutex<std::collections::HashMap<String, (u32, std::time::Instant)>>,
+    pub rate_limiter: tokio::sync::Mutex<std::collections::HashMap<String, (u32, std::time::Instant)>>,
     pub http: reqwest::Client,
     pub access_code: String,
     pub recon_js_template: Option<String>,
     pub external_api_limiter: std::sync::Arc<tokio::sync::Semaphore>,
     pub posthog: posthog::PostHog,
     pub trailbase_healthy: Arc<AtomicBool>,
+    pub jwt_secret: String,
+    pub api_keys: std::collections::HashSet<String>,
+    pub oauth_clients: std::collections::HashMap<String, String>,
 }
 
 impl AppState {
@@ -86,6 +89,10 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(log_level).init();
 
     START_TIME.set(std::time::Instant::now()).ok();
+
+    if std::env::var("DASHBOARD_TOKEN").unwrap_or_default().is_empty() {
+        tracing::warn!("DASHBOARD_TOKEN is not set. Dashboard API routes are UNPROTECTED. Set DASHBOARD_TOKEN to secure the admin dashboard.");
+    }
 
     let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "./data".into());
     let templates_dir = std::env::var("TEMPLATES_DIR").unwrap_or_else(|_| "./templates".into());
@@ -169,6 +176,50 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("🔐 Dashboard URL: http://{}/?code={}", listen_addr, access_code);
     tracing::info!("🔐 Access code file: {}/.access_code", data_dir);
 
+    // Parse API keys from env (comma-separated for multiple keys)
+    let api_keys: std::collections::HashSet<String> = std::env::var("API_KEY")
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if !api_keys.is_empty() {
+        tracing::info!("🔐 API key auth enabled with {} key(s)", api_keys.len());
+    }
+
+    // Parse OAuth2 client registrations from env (comma-separated parallel lists)
+    let oauth_clients: std::collections::HashMap<String, String> = {
+        let ids: Vec<String> = std::env::var("OAUTH_CLIENT_ID")
+            .unwrap_or_default()
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let secrets: Vec<String> = std::env::var("OAUTH_CLIENT_SECRET")
+            .unwrap_or_default()
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        ids.into_iter().zip(secrets.into_iter()).collect()
+    };
+    if !oauth_clients.is_empty() {
+        tracing::info!("🔐 OAuth2 client-credentials enabled with {} client(s)", oauth_clients.len());
+    }
+
+    // JWT secret for signing/verifying OAuth2 tokens
+    let jwt_secret = match std::env::var("JWT_SECRET") {
+        Ok(ref s) if !s.is_empty() => {
+            tracing::info!("🔐 JWT_SECRET loaded from environment");
+            s.clone()
+        }
+        _ => {
+            let secret = format!("{}{}", uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
+            tracing::warn!("JWT_SECRET not set. Using ephemeral secret. Tokens will NOT survive restarts. Set JWT_SECRET for persistence.");
+            secret
+        }
+    };
+
     let state = Arc::new(AppState {
         pool: pool.clone(),
         data_dir: data_dir.clone(),
@@ -177,26 +228,36 @@ async fn main() -> anyhow::Result<()> {
         template_cache: tokio::sync::RwLock::new(std::collections::HashMap::new()),
         trailbase,
         version: version.clone(),
-        rate_limiter: std::sync::Mutex::new(std::collections::HashMap::new()),
+        rate_limiter: tokio::sync::Mutex::new(std::collections::HashMap::new()),
         http,
         access_code: access_code.clone(),
         recon_js_template,
         external_api_limiter,
         posthog,
         trailbase_healthy: trailbase_healthy.clone(),
+        jwt_secret,
+        api_keys,
+        oauth_clients,
     });
 
     templates::scan_and_register(&state).await?;
     templates::prewarm_cache(&state).await?;
 
-    let allowed_origins = std::env::var("CORS_ORIGIN").unwrap_or_else(|_| "*".into());
-    let cors = if allowed_origins == "*" {
-        CorsLayer::new().allow_origin(Any).allow_methods([Method::GET, Method::POST, Method::DELETE]).allow_headers(Any)
+    let allowed_origins = std::env::var("CORS_ORIGIN").unwrap_or_default();
+    let cors: Option<CorsLayer> = if allowed_origins.is_empty() {
+        tracing::warn!("CORS_ORIGIN not set. CORS requests will be blocked by browsers. Set CORS_ORIGIN to your dashboard origin (e.g. http://localhost:8080).");
+        None
+    } else if allowed_origins == "*" {
+        tracing::warn!("CORS_ORIGIN is '*', allowing requests from any origin. This is insecure for production.");
+        Some(CorsLayer::new().allow_origin(Any).allow_methods([Method::GET, Method::POST, Method::DELETE]).allow_headers(Any))
     } else {
-        CorsLayer::new()
-            .allow_origin(allowed_origins.parse::<axum::http::HeaderValue>().unwrap())
-            .allow_methods([Method::GET, Method::POST, Method::DELETE])
-            .allow_headers(Any)
+        match allowed_origins.parse::<axum::http::HeaderValue>() {
+            Ok(origin) => Some(CorsLayer::new().allow_origin(origin).allow_methods([Method::GET, Method::POST, Method::DELETE]).allow_headers(Any)),
+            Err(e) => {
+                tracing::error!("Invalid CORS_ORIGIN '{}': {}. CORS requests will be blocked.", allowed_origins, e);
+                None
+            }
+        }
     };
 
     let compression = if std::env::var("ENABLE_COMPRESSION").map(|v| v != "false").unwrap_or(true) {
@@ -235,6 +296,7 @@ async fn main() -> anyhow::Result<()> {
     // applies to dashboard API routes, not public capture/template routes.
     let public_routes = Router::new()
         .route("/api/health", get(health))
+        .route("/api/oauth/token", post(auth::token_endpoint))
         .route("/t/:template_id", get(templates::serve_template))
         .route("/t/recon.js", get(serve_recon_js))
         .nest("/api/capture", capture_routes);
@@ -258,7 +320,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/storage", get(api::list_storage).delete(api::delete_all_storage))
         .route("/api/storage/:id", delete(api::delete_storage))
         .route_layer(axum::middleware::from_fn(auth::csrf_middleware))
-        .route_layer(axum::middleware::from_fn(auth::auth_middleware));
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), auth::auth_middleware));
 
     // Access code endpoint: shows code on local-only requests
     let access_routes = Router::new()
@@ -271,8 +333,8 @@ async fn main() -> anyhow::Result<()> {
         .merge(dashboard_api)
         .merge(access_routes)
         .fallback(serve_spa)
-        .layer(cors)
         .layer(axum::middleware::from_fn(set_real_ip));
+    if let Some(c) = cors { app = app.layer(c); }
 
     if let Some(c) = compression { app = app.layer(c); }
     if let Some(t) = trace { app = app.layer(t); }
@@ -287,7 +349,10 @@ async fn main() -> anyhow::Result<()> {
     let graceful = std::env::var("GRACEFUL_SHUTDOWN").map(|v| v != "false").unwrap_or(true);
     if graceful {
         let shutdown = async {
-            tokio::signal::ctrl_c().await.expect("install ctrl-c handler");
+            match tokio::signal::ctrl_c().await {
+                Ok(()) => {}
+                Err(e) => tracing::warn!("Failed to install ctrl-c handler: {}", e),
+            }
             tracing::info!("Graceful shutdown signal received, draining connections...");
         };
         axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
@@ -358,11 +423,16 @@ fn has_valid_query_code(req: &Request<Body>) -> bool {
 
 /// Set the access cookie after a valid code-based login.
 fn set_access_cookie(resp: &mut Response, expected: &str) {
+    let secure_flag = if std::env::var("CAMPHISH_SECURE_COOKIE").map(|v| v != "false").unwrap_or(true) {
+        "; Secure"
+    } else {
+        ""
+    };
     resp.headers_mut().insert(
         "Set-Cookie",
         format!(
-            "camphish_access={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400",
-            expected
+            "camphish_access={}; Path=/; HttpOnly; SameSite=Lax{}; Max-Age=86400",
+            expected, secure_flag
         )
         .parse()
         .unwrap(),

