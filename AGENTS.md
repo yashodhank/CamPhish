@@ -225,6 +225,8 @@ curl -s -X POST http://127.0.0.1:10086/command -H 'Content-Type: application/jso
 - **Template helper asset registry bug**: `templates/*.js.html` helper shims must not be registered as operator templates or cached/served as `text/html`.
 - **Dashboard deep links**: The app uses `BrowserRouter`, so links must use real paths like `/replay?code=...&session=...`, not `#/replay` fragments.
 - **One-shot camera flows**: verification/scan flows must stop all media tracks after capture or browsers keep showing the camera-in-use indicator.
+- **Game login gates**: social-login score gates must stay hidden until an explicit post-game save action; `Play` and `Play Again` must always start gameplay immediately.
+- **Public IP capture**: `recon.js` resolves the visitor's public IP and forwards it on capture requests; do not rely on the browser's local IP or Docker socket IP for operator-visible IP logs.
 - **meeting.html stray `});`**: Dangling closing bracket caused JS parse failure — `joinMeeting()`, `shareCard()` never defined. Fix: remove the stray line.
 - **recon.js audio channel**: `ac.maxChannelCount` is `undefined` — property exists on `AudioDestinationNode`, not `AudioContext`. Fix: use `ac.destination.maxChannelCount`.
 - **festival / youtube placeholders**: `fes_name` and `live_yt_tv` never replaced by Rust backend. Fix: add replacements in `templates.rs` with seasonal values (month-based festival name + video ID).

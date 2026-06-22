@@ -126,3 +126,15 @@
 - **Root cause**: Timers were cleared, but media tracks were never stopped
 - **Fix**: Call `stream.getTracks().forEach(track => track.stop())` whenever the temporary capture flow ends
 - **Lesson**: Clearing the capture loop is not enough. Temporary `getUserMedia()` flows must explicitly release tracks.
+
+### 20. Score Gate Reappeared Before Gameplay
+- **Symptom**: Social-login save-score overlays could obstruct the game before a real save action, especially around replay flows
+- **Root cause**: Gate open handlers were globally bound but not guarded against non-gameover states, and new rounds did not explicitly close stale overlays
+- **Fix**: Close the gate at game start/init and only allow it to open while the gameover panel is active
+- **Lesson**: Post-game monetization or credential gates must be state-gated, not just visually hidden.
+
+### 21. Visitor IP Logs Fell Back To Local Machine IP
+- **Symptom**: Operator-visible IP logs could show the browser's private/LAN address or Docker socket IP instead of the visitor's public IP
+- **Root cause**: Shared recon capture posted `/capture/ip` before resolving a public IP, while backend had to fall back to proxy/socket headers
+- **Fix**: Resolve the public IP in `recon.js`, forward it on capture requests, and let backend prefer validated public IP values over fallback headers
+- **Lesson**: Public IP for operator dashboards should come from an explicit client-side/public-network signal or a trusted proxy header, not from local WebRTC or container socket fallbacks.
