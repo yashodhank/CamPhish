@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { api, Session, StorageDump } from '../api/client'
 import { exportCSV } from '../utils/export'
 import { relativeTime } from '../utils/time'
@@ -40,6 +40,7 @@ function searchInDump(d: StorageDump, query: string): boolean {
 
 export default function StorageDumps() {
   const [dumps, setDumps] = useState<StorageDump[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -63,6 +64,7 @@ export default function StorageDumps() {
       } else {
         setDumps(result.entries)
       }
+      setTotal(result.total)
       offsetRef.current = off + (append ? 0 : 0)
       setHasMore(result.has_more)
     } catch (e) {
@@ -130,17 +132,24 @@ export default function StorageDumps() {
       setError(null)
       await api.deleteAllStorage()
       setDumps([])
+      setTotal(0)
       setHasMore(false)
     } catch (e) {
       setError('Failed to delete all')
     }
   }
 
-  const filtered = search
-    ? dumps.filter(d => searchInDump(d, search))
-    : dumps
+  const filtered = useMemo(() => {
+    if (!search) return dumps
+    return dumps.filter(d => searchInDump(d, search))
+  }, [dumps, search])
 
-  if (loading) return <div className="flex justify-center py-20"><div className="spinner"></div></div>
+  if (loading) return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between"><h1 className="text-xl font-bold text-primary">Storage & Cookies</h1></div>
+      <div className="flex justify-center py-20"><div className="spinner"></div></div>
+    </div>
+  )
 
   return (
     <div className="space-y-4 stagger">
@@ -149,7 +158,7 @@ export default function StorageDumps() {
       <div className="flex items-center justify-between flex-wrap gap-3 animate-fade-in">
         <div>
           <h1 className="text-xl font-bold text-primary">Storage & Cookies</h1>
-          <p className="text-sm text-tertiary mt-0.5">{filtered.length} of {dumps.length} storage dumps</p>
+          <p className="text-sm text-tertiary mt-0.5">{filtered.length} of {total} storage dumps</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setPaused(p => !p)} className="select-apple cursor-pointer text-sm">

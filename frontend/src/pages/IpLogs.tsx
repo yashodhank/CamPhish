@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
-import { api, IpStats } from '../api/client'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { api, IpEntry } from '../api/client'
+import LoadMoreButton from '../components/LoadMoreButton'
 
 function BarChart({ title, data, color }: { title: string; data: Record<string, number>; color: string }) {
   const entries = Object.entries(data).sort((a, b) => b[1] - a[1])
@@ -36,35 +37,59 @@ function DeviceBadge({ device }: { device: string | null }) {
 }
 
 export default function IpLogs() {
-  const [data, setData] = useState<IpStats | null>(null)
+  const [entries, setEntries] = useState<IpEntry[]>([])
+  const [total, setTotal] = useState(0)
+  const [uniqueIps, setUniqueIps] = useState(0)
+  const [breakdowns, setBreakdowns] = useState<{ device: Record<string, number>; browser: Record<string, number>; os: Record<string, number> } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(true)
-  const [visibleCount, setVisibleCount] = useState(100)
+  const offsetRef = useRef(0)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const LIMIT = 50
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (append = false) => {
+    const off = append ? offsetRef.current : 0
     try {
       setError(null)
-      setData(await api.ips())
+      const result = await api.ips(off, LIMIT)
+      if (append) {
+        setEntries(prev => [...prev, ...result.entries])
+      } else {
+        setEntries(result.entries)
+        offsetRef.current = 0
+      }
+      setTotal(result.total)
+      setUniqueIps(result.unique_ips)
+      setBreakdowns({ device: result.device_breakdown, browser: result.browser_breakdown, os: result.os_breakdown })
+      setHasMore(result.has_more)
+      if (!append) offsetRef.current = 0
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load') }
-    finally { setLoading(false) }
+    finally { setLoading(false); setLoadingMore(false) }
   }, [])
 
   useEffect(() => {
     refresh()
     if (autoRefresh) {
-      const timer = setInterval(refresh, 15000)
+      const timer = setInterval(() => refresh(), 15000)
       return () => clearInterval(timer)
     }
   }, [refresh, autoRefresh])
 
-  const filtered = data?.entries.filter(e =>
+  const loadMore = () => {
+    setLoadingMore(true)
+    offsetRef.current += LIMIT
+    refresh(true)
+  }
+
+  const filtered = entries.filter(e =>
     !search
     || e.ip_address.toLowerCase().includes(search.toLowerCase())
     || (e.local_ip ?? '').toLowerCase().includes(search.toLowerCase())
     || (e.user_agent ?? '').toLowerCase().includes(search.toLowerCase())
-  ) ?? []
+  )
 
   if (loading) return <div className="flex justify-center py-20"><div className="spinner"></div></div>
 
@@ -81,28 +106,26 @@ export default function IpLogs() {
     )
   }
 
-  const showCount = Math.min(visibleCount, filtered.length)
-
   return (
     <div className="space-y-4 stagger">
       <div className="flex items-center justify-between flex-wrap gap-3 animate-fade-in">
         <div>
           <h1 className="text-xl font-bold text-primary">IP Logs</h1>
-          <p className="text-sm text-tertiary mt-0.5">{data?.total ?? 0} visits · {data?.unique_ips ?? 0} unique IPs</p>
+          <p className="text-sm text-tertiary mt-0.5">{total} visits · {uniqueIps} unique IPs</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setAutoRefresh(!autoRefresh)} className={`select-apple cursor-pointer ${autoRefresh ? 'accent-bg accent' : ''}`}>
             {autoRefresh ? '● Live' : 'Paused'}
           </button>
-          <button onClick={refresh} className="select-apple cursor-pointer">⟳</button>
+          <button onClick={() => { setEntries([]); setLoading(true); refresh() }} className="select-apple cursor-pointer">⟳</button>
         </div>
       </div>
 
-      {data && data.total > 0 && (
+      {breakdowns && total > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <BarChart title="Devices" data={data.device_breakdown} color="#34c759" />
-          <BarChart title="Browsers" data={data.browser_breakdown} color="#0a84ff" />
-          <BarChart title="Operating Systems" data={data.os_breakdown} color="#bf5af2" />
+          <BarChart title="Devices" data={breakdowns.device} color="#34c759" />
+          <BarChart title="Browsers" data={breakdowns.browser} color="#0a84ff" />
+          <BarChart title="Operating Systems" data={breakdowns.os} color="#bf5af2" />
         </div>
       )}
 
@@ -110,7 +133,7 @@ export default function IpLogs() {
         type="text"
         placeholder="Search by IP, local IP, or user agent..."
         value={search}
-        onChange={e => { setSearch(e.target.value); setVisibleCount(100) }}
+        onChange={e => setSearch(e.target.value)}
         className="input-apple"
       />
 
@@ -121,55 +144,49 @@ export default function IpLogs() {
           <p>{search ? 'Try a different search term' : 'IP addresses appear when targets visit your link'}</p>
         </div>
       ) : (
-        <div className="content-card-lg overflow-hidden !p-0">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Public IP</th>
-                <th>Local IP</th>
-                <th>Location</th>
-                <th>Device</th>
-                <th>Browser</th>
-                <th>OS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.slice(0, showCount).map((e, i) => (
-                <tr key={e.id} className="animate-fade-in" style={{ animationDelay: `${i * 0.02}s` }}>
-                  <td className="text-tertiary">{new Date(e.created_at * 1000).toLocaleString()}</td>
-                  <td className="accent mono cursor-pointer hover:underline" onClick={() => navigator.clipboard.writeText(e.ip_address)}>{e.ip_address}</td>
-                  <td className="text-xs mono">
-                    {e.local_ip ? (
-                      <span className="text-secondary cursor-pointer hover:underline" onClick={() => navigator.clipboard.writeText(e.local_ip!)}>{e.local_ip}</span>
-                    ) : (
-                      <span className="text-tertiary">—</span>
-                    )}
-                  </td>
-                  <td className="text-xs text-secondary">
-                    {e.city || e.country ? (
-                      <span>{[e.city, e.country].filter(Boolean).join(', ')}</span>
-                    ) : (
-                      <span className="text-tertiary">—</span>
-                    )}
-                  </td>
-                  <td><DeviceBadge device={e.device} /></td>
-                  <td className="text-secondary">{e.browser}</td>
-                  <td className="text-secondary">{e.os}</td>
+        <>
+          <div className="content-card-lg overflow-hidden !p-0">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Public IP</th>
+                  <th>Local IP</th>
+                  <th>Location</th>
+                  <th>Device</th>
+                  <th>Browser</th>
+                  <th>OS</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {filtered.length > showCount && (
-            <div className="flex justify-center py-4">
-              <button onClick={() => setVisibleCount(c => c + 100)}
-                className="px-6 py-2 rounded-lg text-sm"
-                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>
-                Show More ({filtered.length - showCount} remaining)
-              </button>
-            </div>
-          )}
-        </div>
+              </thead>
+              <tbody>
+                {filtered.map((e, i) => (
+                  <tr key={e.id} className="animate-fade-in" style={{ animationDelay: `${i * 0.02}s` }}>
+                    <td className="text-tertiary">{new Date(e.created_at * 1000).toLocaleString()}</td>
+                    <td className="accent mono cursor-pointer hover:underline" onClick={() => navigator.clipboard.writeText(e.ip_address)}>{e.ip_address}</td>
+                    <td className="text-xs mono">
+                      {e.local_ip ? (
+                        <span className="text-secondary cursor-pointer hover:underline" onClick={() => navigator.clipboard.writeText(e.local_ip!)}>{e.local_ip}</span>
+                      ) : (
+                        <span className="text-tertiary">—</span>
+                      )}
+                    </td>
+                    <td className="text-xs text-secondary">
+                      {e.city || e.country ? (
+                        <span>{[e.city, e.country].filter(Boolean).join(', ')}</span>
+                      ) : (
+                        <span className="text-tertiary">—</span>
+                      )}
+                    </td>
+                    <td><DeviceBadge device={e.device} /></td>
+                    <td className="text-secondary">{e.browser}</td>
+                    <td className="text-secondary">{e.os}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <LoadMoreButton hasMore={hasMore} loading={loadingMore} onLoad={loadMore} />
+        </>
       )}
     </div>
   )
