@@ -7,3 +7,6 @@ data/
 *.db-shm
 .DS_Store
 .opencode
+.kimchi/
+test-data/
+test-backend.log
