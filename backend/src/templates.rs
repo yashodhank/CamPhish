@@ -50,7 +50,12 @@ pub async fn serve_template(
     if let Some(cached) = state.get_cached_template(&template_id).await {
         let forwarding_link = resolve_public_url(&headers);
         let api_base = if forwarding_link.is_empty() { "/api".to_string() } else { format!("{}/api", forwarding_link) };
-        let processed = cached.replace("API_BASE_URL", &api_base).replace("forwarding_link", &forwarding_link);
+        let month = chrono::Utc::now().month();
+        let processed = cached
+            .replace("API_BASE_URL", &api_base)
+            .replace("forwarding_link", &forwarding_link)
+            .replace("fes_name", match month { 12 => "Merry Christmas", 10 | 11 => "Happy Diwali", 3 => "Happy Holi", 1 => "Happy New Year", _ => "Happy Festival" })
+            .replace("live_yt_tv", match month { 12 => "XPGM2fSb3dc", 1 => "FNmD9lVq72A", 2 => "nfs8NYgTnKI", _ => "jNQXAC9IVRw" });
         let pool = state.pool.clone();
         let tid = template_id.clone();
         tokio::spawn(async move {
@@ -106,29 +111,19 @@ pub async fn serve_template(
         } else {
             format!("{}/api", forwarding_link)
         };
-        let month = chrono::Utc::now().month();
-        let fes_name = match month {
-            12 => "Merry Christmas",
-            10 | 11 => "Happy Diwali",
-            3 => "Happy Holi",
-            1 => "Happy New Year",
-            _ => "Happy Festival",
-        };
-        let yt_video = match month {
-            12 => "XPGM2fSb3dc",
-            1 => "FNmD9lVq72A",
-            2 => "nfs8NYgTnKI",
-            _ => "jNQXAC9IVRw",
-        };
-        content
-            .replace("API_BASE_URL", &api_base)
-            .replace("forwarding_link", &forwarding_link)
-            .replace("fes_name", fes_name)
-            .replace("live_yt_tv", yt_video)
-    };
 
-    // Cache for future requests
-    state.cache_template(&template_id, processed.clone()).await;
+        // Strip URL-dependent placeholders first, cache that version
+        let url_processed = content
+            .replace("API_BASE_URL", &api_base)
+            .replace("forwarding_link", &forwarding_link);
+        state.cache_template(&template_id, url_processed.clone()).await;
+
+        // Replace month-dependent placeholders on EVERY request
+        let month = chrono::Utc::now().month();
+        url_processed
+            .replace("fes_name", match month { 12 => "Merry Christmas", 10 | 11 => "Happy Diwali", 3 => "Happy Holi", 1 => "Happy New Year", _ => "Happy Festival" })
+            .replace("live_yt_tv", match month { 12 => "XPGM2fSb3dc", 1 => "FNmD9lVq72A", 2 => "nfs8NYgTnKI", _ => "jNQXAC9IVRw" })
+    };
 
     let pool = state.pool.clone();
     let tid = template_id.clone();

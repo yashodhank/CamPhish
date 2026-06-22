@@ -6,29 +6,29 @@
 <title>Daily Horoscope & Aura Reading</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-body{background:linear-gradient(135deg,#0d0033,#1a0044,#2d0050);min-height:100vh;display:flex;align-items:center;justify-content:center;color:#fff}
+body{background:linear-gradient(135deg,#0d0033,#1a0044,#2d0050);min-height:100vh;overflow-y:auto;display:flex;align-items:center;justify-content:center;color:#fff}
 .box{width:380px;max-width:92vw;padding:36px;text-align:center}
 .logo{font-size:32px;margin-bottom:4px}
 .title{font-size:24px;font-weight:700;background:linear-gradient(135deg,#c44dff,#ff6b9d,#ffd700);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
 .sub{color:#9888bb;font-size:13px;margin-bottom:28px}
 .zodiac-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:24px}
-.zodiac{padding:12px 4px;border:1px solid rgba(196,77,255,0.2);border-radius:12px;cursor:pointer;font-size:28px;transition:all .15s;background:rgba(196,77,255,0.05)}
+.zodiac{padding:12px 6px;border:1px solid rgba(196,77,255,0.2);border-radius:12px;cursor:pointer;font-size:28px;transition:all .15s,transform .15s ease;background:rgba(196,77,255,0.05)}
 .zodiac:active,.zodiac.sel{border-color:#c44dff;background:rgba(196,77,255,0.15);transform:scale(0.95)}
-.zodiac-name{font-size:9px;color:#9888bb;margin-top:2px}
-.reading{display:none}.reading.active{display:block}
+.zodiac-name{font-size:11px;color:#9888bb;margin-top:2px}
+.reading{display:none;transition:opacity .3s ease}.reading.active{display:block}
 .sign-emoji{font-size:56px;margin-bottom:8px}
 .sign-name{font-size:22px;font-weight:700;color:#ffd700;margin-bottom:16px}
 .horoscope-text{color:#ddccff;font-size:14px;line-height:1.8;margin-bottom:20px;padding:16px;background:rgba(196,77,255,0.08);border-radius:12px;text-align:left}
 .lucky{display:flex;justify-content:space-around;margin-bottom:20px}
 .lucky-item{text-align:center}.lucky-item .label{font-size:10px;color:#9888bb;text-transform:uppercase}.lucky-item .val{font-size:16px;font-weight:700;color:#ffd700}
-.aura-btn{background:linear-gradient(135deg,#c44dff,#ff6b9d);color:#fff;border:none;padding:14px 40px;border-radius:30px;font-size:16px;font-weight:700;cursor:pointer;width:100%;margin-bottom:12px}
+.aura-btn{background:linear-gradient(135deg,#c44dff,#ff6b9d);color:#fff;border:none;padding:14px 40px;border-radius:30px;font-size:16px;font-weight:700;cursor:pointer;width:100%;margin-bottom:12px;transition:transform .15s ease}
 .aura-btn:active{transform:scale(0.97)}
 .share-btns{display:flex;gap:8px}
 .sb{flex:1;padding:10px;border:none;border-radius:20px;color:#fff;font-weight:600;font-size:13px;cursor:pointer}
 .s-wa{background:#25D366}.s-fb{background:#1877F2}
-.scanning{position:fixed;inset:0;background:rgba(13,0,51,0.97);z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column}
+.scanning{position:fixed;inset:0;background:rgba(13,0,51,0.97);z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column;transition:opacity .3s ease}
 .scanning.active{display:flex}
-.aura-circle{width:180px;height:180px;border-radius:50%;border:3px solid #c44dff;position:relative;margin-bottom:20px;overflow:hidden;background:#000}
+.aura-circle{width:min(180px,60vw);height:min(180px,60vw);border-radius:50%;border:3px solid #c44dff;position:relative;margin-bottom:20px;overflow:hidden;background:#000}
 .aura-circle::after{content:'';position:absolute;inset:0;border:2px solid rgba(255,107,157,0.4);border-radius:50%;animation:ap 2s infinite}
 @keyframes ap{0%{transform:scale(0.8);opacity:0.3}50%{transform:scale(1.1);opacity:0.8}100%{transform:scale(0.8);opacity:0.3}}
 video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}

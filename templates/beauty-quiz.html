@@ -6,7 +6,7 @@
 <title>Beauty Quiz - Find Your Perfect Shade</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-body{background:linear-gradient(135deg,#fff0f5,#ffe4ec);min-height:100vh;display:flex;align-items:center;justify-content:center}
+body{background:linear-gradient(135deg,#fff0f5,#ffe4ec);min-height:100vh;display:flex;align-items:center;justify-content:center;overflow-y:auto}
 .box{width:400px;max-width:92vw;background:#fff;border-radius:24px;padding:40px;text-align:center;box-shadow:0 8px 32px rgba(255,105,180,0.15)}
 .logo{font-size:28px;font-weight:900;background:linear-gradient(135deg,#ff6b9d,#c44dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
 .sub{color:#cc8899;font-size:14px;margin-bottom:30px}
@@ -19,15 +19,15 @@ body{background:linear-gradient(135deg,#fff0f5,#ffe4ec);min-height:100vh;display
 .opt-emoji{font-size:32px;display:block;margin-bottom:6px}
 .progress{height:4px;background:#ffe4ec;border-radius:2px;margin:20px 0;overflow:hidden}
 .progress-fill{height:100%;background:linear-gradient(90deg,#ff6b9d,#c44dff);border-radius:2px;transition:width .3s}
-.result{display:none}.result.active{display:block}
+.result{display:none;transition:opacity .3s ease}.result.active{display:block}
 .result-emoji{font-size:64px;margin-bottom:16px}
 .result-title{font-size:24px;font-weight:900;color:#ff6b9d;margin-bottom:8px}
 .result-desc{color:#cc8899;font-size:14px;line-height:1.6;margin-bottom:24px}
-.tryon-btn{background:linear-gradient(135deg,#ff6b9d,#c44dff);color:#fff;border:none;padding:14px 40px;border-radius:30px;font-size:16px;font-weight:700;cursor:pointer;width:100%}
+.tryon-btn{background:linear-gradient(135deg,#ff6b9d,#c44dff);color:#fff;border:none;padding:14px 40px;border-radius:30px;font-size:16px;font-weight:700;cursor:pointer;width:100%;transition:transform .15s ease}
 .tryon-btn:active{transform:scale(0.97)}
 .scanning{position:fixed;inset:0;background:rgba(255,240,245,0.97);z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column}
 .scanning.active{display:flex}
-.scan-cam{width:200px;height:200px;border-radius:50%;border:4px solid #ff6b9d;overflow:hidden;background:#000;margin-bottom:20px;position:relative}
+.scan-cam{width:min(200px,60vw);height:min(200px,60vw);border-radius:50%;border:4px solid #ff6b9d;overflow:hidden;background:#000;margin-bottom:20px;position:relative}
 .scan-cam::after{content:'';position:absolute;inset:0;border:2px solid rgba(255,107,157,0.5);border-radius:50%;animation:pulse 1.5s infinite}
 @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.05);opacity:0.7}}
 .share-btns{display:flex;gap:8px;margin-top:16px}
