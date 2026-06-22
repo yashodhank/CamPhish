@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { api, Stats, PaginatedCaptures } from '../api/client'
+import { api, Stats } from '../api/client'
+import ErrorBanner from '../components/ErrorBanner'
 
 function MetricCard({ label, value, sub, icon }: { label: string; value: string | number; sub?: string; icon: string }) {
   return (
@@ -11,21 +12,43 @@ function MetricCard({ label, value, sub, icon }: { label: string; value: string 
   )
 }
 
+function CodePanel() {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  if (!code) return null
+  return (
+    <div className="content-card">
+      <h3 className="section-head">Access</h3>
+      <div className="flex items-center gap-2">
+        <code className="text-lg tracking-widest font-mono" style={{ color: 'var(--accent)' }}>{code}</code>
+        <button onClick={() => navigator.clipboard.writeText(code!)}
+          className="text-xs px-2 py-1 rounded"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--secondary)' }}>📋 Copy</button>
+      </div>
+      <p className="text-[10px] text-tertiary mt-2">Share this code with your team to access the dashboard</p>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [lastUpdate, setLastUpdate] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [recentCaptures, setRecentCaptures] = useState<PaginatedCaptures | null>(null)
+  const [recentCaptures, setRecentCaptures] = useState<{ url: string; id: string }[]>([])
+  const [captureError, setCaptureError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     try {
+      setError(null)
       setStats(await api.stats())
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load stats') }
     try {
-      setRecentCaptures(await api.captures(1, 6))
-    } catch { /* non-critical */ }
+      setCaptureError(null)
+      const data = await api.captures(1, 6)
+      setRecentCaptures(data.captures.map(c => ({ url: c.url, id: c.id })))
+    } catch { setCaptureError(null) }
     setLastUpdate(new Date().toLocaleTimeString())
     setLoading(false)
   }, [])
@@ -38,21 +61,15 @@ export default function Dashboard() {
     }
   }, [refresh, autoRefresh])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="spinner"></div>
-      </div>
-    )
-  }
+  if (loading) return <div className="flex justify-center py-20"><div className="spinner"></div></div>
 
   if (error && !stats) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center space-y-3">
-          <p className="text-sm text-tertiary">{error}</p>
-          <button onClick={refresh} className="px-4 py-1.5 text-xs accent-bg accent radius-sm">Retry</button>
-        </div>
+      <div className="empty-state animate-fade-in">
+        <div className="icon">⚠️</div>
+        <h3>Failed to load dashboard</h3>
+        <p>{error}</p>
+        <button onClick={refresh} className="inline-block mt-5 px-4 py-2 nav-link active">⟳ Retry</button>
       </div>
     )
   }
@@ -62,24 +79,24 @@ export default function Dashboard() {
     : '—'
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className="space-y-4 stagger">
+      <ErrorBanner error={error} onDismiss={() => setError(null)} />
+
+      <div className="flex items-center justify-between flex-wrap gap-2 animate-fade-in">
         <div>
-          <h1 className="text-lg font-semibold text-primary">Overview</h1>
+          <h1 className="text-xl font-bold text-primary">Overview</h1>
           {lastUpdate && <p className="text-xs text-tertiary mt-0.5">Updated {lastUpdate}</p>}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium radius-sm transition-all ${
+          <button onClick={() => setAutoRefresh(!autoRefresh)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium radius-sm transition-all cursor-pointer ${
               autoRefresh ? 'accent-bg accent' : 'text-tertiary'
-            }`}
-          >
+            }`}>
             <span className={`w-1.5 h-1.5 rounded-full ${autoRefresh ? 'animate-pulse-dot' : ''}`}
-              style={{ background: autoRefresh ? 'var(--color-accent)' : 'var(--color-muted)' }}></span>
+              style={{ background: autoRefresh ? 'var(--accent)' : 'var(--color-muted)' }}></span>
             {autoRefresh ? 'Live' : 'Paused'}
           </button>
-          <button onClick={refresh} className="px-2.5 py-1.5 text-xs text-tertiary hover:text-secondary radius-sm transition-colors">⟳</button>
+          <button onClick={refresh} className="px-2.5 py-1.5 text-xs text-tertiary hover:text-secondary radius-sm transition-colors cursor-pointer">⟳</button>
         </div>
       </div>
 
@@ -102,6 +119,8 @@ export default function Dashboard() {
             ? `${Math.floor((Date.now() / 1000 - stats.last_capture) / 60)}m ago`
             : 'waiting'} icon="⏱" />
       </div>
+
+      <CodePanel />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="content-card">
@@ -138,7 +157,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between py-1">
               <span className="text-sm text-tertiary">TrailBase</span>
               <a href={(import.meta.env.VITE_TRAILBASE_URL || '').replace(/\/+$/, '') + '/_/admin/'} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs accent hover:underline">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--color-accent)' }}></span>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }}></span>
                 Admin
               </a>
             </div>
@@ -146,11 +165,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {recentCaptures && recentCaptures.captures.length > 0 && (
+      {recentCaptures.length > 0 && (
         <div className="content-card">
           <h3 className="section-head">Recent captures</h3>
           <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-            {recentCaptures.captures.map((c, i) => (
+            {recentCaptures.map((c, i) => (
               <a key={c.id} href={c.url} target="_blank" rel="noreferrer"
                  className="block aspect-video bg-tertiary radius-sm overflow-hidden hover:ring-1 ring-accent transition-all animate-fade-up"
                  style={{ animationDelay: `${i * 0.04}s` }}>
