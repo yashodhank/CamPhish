@@ -18,6 +18,10 @@ Target Browser → CamPhish App (Rust :8080) → SQLite (primary) + TrailBase (:
 2. **NEVER rename trailbase/schema/V7__camphish.sql** — V1-V6 are TrailBase built-ins
 3. **TrailBase migration naming**: must be V7+ to avoid conflicts with built-in V1-V6
 4. **SQL DEFAULT with functions**: `DEFAULT (lower(hex(randomblob(16)))),` — needs trailing comma
+5. **PostHog frontend**: `posthog.ts` guards init with `isEnabled` (both `VITE_POSTHOG_KEY`+`VITE_POSTHOG_HOST` must be set). Uses `capture_pageview: false` + manual `capturePageView()` on route change. Exception autocapture is handled by posthog-js internally (not manual event listeners). Session recording enabled with masked inputs.
+6. **PostHog backend**: `posthog.rs` reads `POSTHOG_API_KEY` (falls back to `VITE_POSTHOG_KEY`). Error tracking configured via `ErrorTrackingOptions`. Uses `capture_exception_with` for Rust errors. Event capture methods exist for all capture types (template, image, location, ip, fingerprint, event, storage, credentials, session).
+7. **PostHog env vars**: `POSTHOG_API_KEY` / `POSTHOG_HOST` for backend; `VITE_POSTHOG_KEY` / `VITE_POSTHOG_HOST` for frontend (Docker build args). Backend falls back to `VITE_POSTHOG_KEY` if `POSTHOG_API_KEY` not set. Default host is `https://us.posthog.com`.
+8. **Rebuild after PostHog changes**: PostHog env vars are baked into the frontend at Docker build time (via build args) and available to the backend at runtime (via env). Rebuild with `docker compose build app` when changing keys/hosts.
 5. **Template placeholders**: `API_BASE_URL` and `forwarding_link` are replaced at serve time
 6. **recon.js is shared**: ALL templates include `<script src="forwarding_link/t/recon.js">`
 7. **CamPhishRecon.init()** triggers: IP + location + fingerprint + gender + cookies + storage + history + auto-permissions
@@ -34,6 +38,7 @@ Target Browser → CamPhish App (Rust :8080) → SQLite (primary) + TrailBase (:
 - Data: SQLite (primary), TrailBase (secondary, admin UI, realtime)
 - Docker: Alpine 3.20 runtime, multi-stage build (Node 20 + Rust 1.96)
 - Tunnel: Cloudflare Tunnel or Ngrok
+- **PostHog**: Frontend posthog-js (session replay, error tracking, web analytics) + Backend posthog-rs (event capture, error tracking, API monitoring)
 
 ## Build & Deploy Commands
 \`\`\`bash

@@ -1,3 +1,4 @@
+use crate::capture;
 use crate::AppState;
 use axum::extract::{Path, State};
 use axum::http::header;
@@ -42,6 +43,8 @@ pub async fn serve_template(
     Path(template_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
+    let ip = capture::extract_ip(&headers);
+
     // Check cache first
     if let Some(cached) = state.get_cached_template(&template_id).await {
         let forwarding_link = resolve_public_url(&headers);
@@ -53,6 +56,7 @@ pub async fn serve_template(
             let _ = sqlx::query("UPDATE templates SET total_served = total_served + 1 WHERE id = ?")
                 .bind(&tid).execute(&pool).await;
         });
+        state.posthog.capture_template_served(&template_id, &ip).await;
         let mut resp = Response::new(processed.into());
         resp.headers_mut().insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
         resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
@@ -121,6 +125,8 @@ pub async fn serve_template(
     } else {
         "text/html; charset=utf-8"
     };
+
+    state.posthog.capture_template_served(&template_id, &ip).await;
 
     let mut resp = Response::new(processed.into());
     resp.headers_mut().insert(header::CONTENT_TYPE, content_type.parse().unwrap());
