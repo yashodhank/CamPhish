@@ -46,11 +46,12 @@ services:
       - TEMPLATES_DIR=/app/templates
       - FRONTEND_DIR=/app/frontend/dist
       - LISTEN_ADDR=0.0.0.0:8080
-      - TUNNEL_LINK=${TUNNEL_LINK:-}
+      - CAMPHISH_URL=${CAMPHISH_URL:-${TUNNEL_URL:-${TUNNEL_LINK:-}}}
       - RUST_LOG=${LOG_LEVEL:-info}
       - GRACEFUL_SHUTDOWN=true
       - ENABLE_COMPRESSION=true
       - ENABLE_TEMPLATE_CACHE=true
+      - CAMPHISH_ACCESS_SEED=${CAMPHISH_ACCESS_SEED:-}
       - TRAILBASE_URL=${TRAILBASE_URL:-}
       - TRAILBASE_API_KEY=${TRAILBASE_API_KEY:-}
     depends_on:

@@ -1,0 +1,56 @@
+# CamPhish Caddy reverse proxy — companion to docker-compose.standalone.yml
+# =============================================================================
+# Provides automatic HTTPS via Let's Encrypt using Caddy.
+#
+# Usage:
+#   docker compose \
+#     -f docker-compose.standalone.yml \
+#     -f docker-compose.caddy.yml \
+#     up -d
+#
+# Requires:
+#   - DOMAIN environment variable (e.g. DOMAIN=camphish.example.com)
+#   - Ports 80 and 443 open on the host
+#   - DNS A record pointing to the host IP
+# =============================================================================
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: camphish-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:?DOMAIN is required (e.g. camphish.example.com)}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - camphish-net
+
+configs:
+  caddy_config:
+    content: |
+      {$DOMAIN} {
+        reverse_proxy camphish:8080
+      }
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  camphish-net:
+    name: camphish-net
+    external: true
