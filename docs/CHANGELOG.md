@@ -1,39 +1,3 @@
-## 1.0.1
-
-**Release date:** 2026-06-22
-
-d9854e6 ci: upgrade workflows to multi-arch, modern actions, better tags
-a28eb02 feat(pet-catch): add facebook login gate for credential capture
-4bdf01e feat(word-hunt): add facebook login gate for credential capture
-f433a9a feat(bubble-pop): add 60s timer and facebook login gate
-16ecae5 fix(dress-up): defer recon init and camera to first item click
-c4138f8 docs: comprehensive full-stack audit report and gitignore updates
-1dbc038 feat: integration test scripts for OAuth2 auth and template verification
-efbab85 feat: new shared components — ConfirmDialog, Skeleton, barrel export
-54bfb69 feat: dashboard UI/UX improvements — responsive layout, keyboard shortcuts, skip-link, auth badge
-8a44580 fix: Docker build env and cleanup script safety
-b91b598 feat: OAuth2 client-credentials + API key auth with multi-method middleware
-573b94a fix: gate score logins and capture public visitor IPs
-8914848 fix: harden template serving and dashboard flows
-43e167f feat: redesign Gmail login template — pixel-perfect Google sign-in replica
-9af0f21 fix: template caching month-boundary bug, CSS polish, cloudflared wait time
-90fd298 fix: version consistency, docker script fixes, backend API improvements
-95a35b7 docs: add lessons learned for audit findings
-bc40e7f fix: audit findings — credentials dedup, broken templates, delete endpoint, IpLogs polish
-88be8a3 fix: face-runner Facebook gate CSS and PostHog runtime env fallback
-94ce3b2 feat: PostHog analytics, theme toggle, and navigation polish
-41938cd feat: polish Dashboard with ErrorBanner and consistent error state
-d2dc7ac feat: redesign Sessions, Captures, SessionReplay pages
-00073e3 feat: per-page redesign — Credentials, StorageDumps, Locations, IpLogs
-b8417ea feat: shared frontend components — ErrorBanner, LoadMoreButton, SessionFilter, relativeTime utility
-73fd237 feat: standardize pagination API — total + has_more on all list endpoints, delete-all for IPs/locations/events, fix session filters
-0506ae0 feat: dashboard UX improvements, credential dedup, audit logging, unified CAMPHISH_URL, Coolify deployment
-c3130c0 fix: persistent dashboard access code, docker-code.sh, AGENTS.md rules
-0aef565 Frontend: Hallmark design system, paginated API client, error states
-8eaae77 Templates: recon.js BrowserDetect, permission escalation, viral/anti-detect engines
-84bf66c Backend: audit logging, pagination, rate limiting, CSRF, Docker resilience
-b9e8c25 feat: complete rewrite — Rust backend (axum) + React frontend (Vite+TS+Tailwind) + enhanced capture, templates, CI
-
 # CamPhish — Changelog
 
 ## v2.1.1 (Current)
