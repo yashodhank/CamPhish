@@ -1,0 +1,125 @@
+# CamPhish for Coolify v4+ — Docker Compose
+# =============================================================================
+# Designed for Coolify v4+ panel with Traefik or Caddy proxy.
+# Uses Coolify magic environment variables for auto FQDN, URL, and secrets.
+# No tunnel service — Coolify's proxy handles external access + SSL.
+#
+# Coolify Magic Envs used:
+#   SERVICE_FQDN_CAMPHISH_8080    — hostname (e.g. camphish.example.com)
+#   SERVICE_URL_CAMPHISH          — full URL  (e.g. https://camphish.example.com)
+#   SERVICE_PASSWORD_CAMPHISH_ACCESS — dashboard access code (auto-generated)
+#   SERVICE_SECRET_CAMPHISH       — fallback secret for access code
+#
+# Backend auto-resolves the public URL by checking:
+#   SERVICE_URL_CAMPHISH → SERVICE_FQDN_CAMPHISH_8080(+https://) → CAMPHISH_URL
+#
+# Usage:
+#   1. In Coolify, create Resource → Docker Compose
+#   2. Set Build Pack to "Docker Compose", Compose File to this file
+#   3. Add domains pointing to port 8080 (or let Coolify auto-assign)
+#   4. Deploy — Coolify injects magic envs automatically
+# =============================================================================
+
+services:
+  camphish:
+    image: ghcr.io/yashodhank/camphish:latest
+    container_name: camphish-app
+    restart: unless-stopped
+    ports:
+      - "8080"
+    environment:
+      # ======================================================================
+      # Coolify Magic Envs — auto-injected by panel, do NOT set manually.
+      # These are declared here so Coolify knows to generate them.
+      # ======================================================================
+      - SERVICE_URL_CAMPHISH            # Full URL: https://camphish.example.com
+      - SERVICE_FQDN_CAMPHISH_8080      # Hostname only: camphish.example.com
+      - SERVICE_PASSWORD_CAMPHISH_ACCESS  # Dashboard access code
+      - SERVICE_SECRET_CAMPHISH         # Fallback secret
+
+      # ======================================================================
+      # Application Config
+      # ======================================================================
+      - DATA_DIR=/app/data
+      - TEMPLATES_DIR=/app/templates
+      - FRONTEND_DIR=/app/frontend/dist
+      - LISTEN_ADDR=0.0.0.0:8080
+      - RUST_LOG=${RUST_LOG:-info}
+      - GRACEFUL_SHUTDOWN=true
+      - ENABLE_COMPRESSION=true
+      - ENABLE_TEMPLATE_CACHE=true
+
+      # ======================================================================
+      # Public URL — backend resolves from Coolify magic envs automatically.
+      # Only set this manually to override the auto-detected URL.
+      # ======================================================================
+      # - CAMPHISH_URL=https://custom.example.com
+
+      # ======================================================================
+      # TrailBase (optional) — set URL and API key if using
+      # ======================================================================
+      - TRAILBASE_URL=${TRAILBASE_URL:-}
+      - TRAILBASE_API_KEY=${TRAILBASE_API_KEY:-}
+
+    # ========================================================================
+    # Coolify UI Labels
+    # ========================================================================
+    labels:
+      - "coolify.managed=true"
+      - "camphish.version=2.1.0"
+      - "camphish.description=Red Team Camera Capture Tool"
+
+    volumes:
+      - camphish_data:/app/data
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+    networks:
+      - camphish-net
+
+  # =========================================================================
+  # TrailBase — OPTIONAL. Uncomment to enable admin UI + realtime.
+  # Requires adding SERVICE_PASSWORD_TRAILBASE_ADMIN magic env too.
+  # =========================================================================
+  # trailbase:
+  #   image: trailbase/trailbase:0.3.0
+  #   container_name: camphish-trailbase
+  #   restart: unless-stopped
+  #   ports:
+  #     - "4000"
+  #   environment:
+  #     - ADDRESS=0.0.0.0:4000
+  #     - ADMIN_EMAIL=${TRAILBASE_ADMIN_EMAIL:-admin@camphish.local}
+  #     - ADMIN_PASSWORD=${SERVICE_PASSWORD_TRAILBASE_ADMIN:-changeme}
+  #     - SERVICE_PASSWORD_TRAILBASE_ADMIN
+  #   volumes:
+  #     - trailbase_data:/app/traildepot
+  #     - ./trailbase/schema:/schema:ro
+  #   entrypoint:
+  #     - /bin/sh
+  #     - -c
+  #     - |
+  #       mkdir -p /app/traildepot/migrations
+  #       cp /schema/*.sql /app/traildepot/migrations/ 2>/dev/null
+  #       exec /app/trail run
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -q --spider http://localhost:4000/_/admin/ || exit 1"]
+  #     interval: 15s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 30s
+  #   networks:
+  #     - camphish-net
+
+volumes:
+  camphish_data:
+  # trailbase_data:
+
+networks:
+  camphish-net:
+    driver: bridge

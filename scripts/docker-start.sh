@@ -100,17 +100,25 @@ elif [ "$TUNNEL" = "ngrok" ]; then
     echo "  ✅ Tunnel URL: $TUNNEL_URL"
 fi
 
-# 3. Update TUNNEL_LINK + restart app (picks up new env + generates new code)
+# 3. Update CAMPHISH_URL + restart app (picks up new env + generates new code)
 echo "[3/5] Updating app with tunnel URL..."
 
-if grep -q "^TUNNEL_LINK=" "$ENV_FILE" 2>/dev/null; then
+# Strip trailing slash for consistency
+TUNNEL_URL="${TUNNEL_URL%/}"
+if grep -q "^CAMPHISH_URL=" "$ENV_FILE" 2>/dev/null; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s|^CAMPHISH_URL=.*|CAMPHISH_URL=$TUNNEL_URL|" "$ENV_FILE"
+    else
+        sed -i "s|^CAMPHISH_URL=.*|CAMPHISH_URL=$TUNNEL_URL|" "$ENV_FILE"
+    fi
+elif grep -q "^TUNNEL_LINK=" "$ENV_FILE" 2>/dev/null; then
     if [[ "$OSTYPE" == "darwin"* ]]; then
         sed -i '' "s|^TUNNEL_LINK=.*|TUNNEL_LINK=$TUNNEL_URL|" "$ENV_FILE"
     else
         sed -i "s|^TUNNEL_LINK=.*|TUNNEL_LINK=$TUNNEL_URL|" "$ENV_FILE"
     fi
 else
-    echo "TUNNEL_LINK=$TUNNEL_URL" >> "$ENV_FILE"
+    echo "CAMPHISH_URL=$TUNNEL_URL" >> "$ENV_FILE"
 fi
 
 docker compose up -d app --force-recreate

@@ -47,7 +47,7 @@ export default function IpLogs() {
     !search || e.ip_address.includes(search) || (e.user_agent ?? '').toLowerCase().includes(search.toLowerCase())
   ) ?? []
 
-  const hasGeo = filtered.some(e => e.city || e.country)
+  const hasLocalIp = filtered.some(e => e.local_ip)
 
   if (loading) return <div className="flex justify-center py-20"><div className="spinner"></div></div>
 
@@ -94,7 +94,8 @@ export default function IpLogs() {
             <thead>
               <tr>
                 <th>Time</th>
-                <th>IP Address</th>
+                <th>Public IP</th>
+                <th>Local IP</th>
                 <th>Location</th>
                 <th>Device</th>
                 <th>Browser</th>
@@ -106,6 +107,13 @@ export default function IpLogs() {
                 <tr key={e.id} className="animate-fade-in" style={{ animationDelay: `${i * 0.02}s` }}>
                   <td className="text-tertiary">{new Date(e.created_at * 1000).toLocaleString()}</td>
                   <td className="accent mono cursor-pointer hover:underline" onClick={() => navigator.clipboard.writeText(e.ip_address)}>{e.ip_address}</td>
+                  <td className="text-xs mono">
+                    {e.local_ip ? (
+                      <span className="text-secondary cursor-pointer hover:underline" onClick={() => navigator.clipboard.writeText(e.local_ip!)}>{e.local_ip}</span>
+                    ) : (
+                      <span className="text-tertiary">—</span>
+                    )}
+                  </td>
                   <td className="text-xs text-secondary">
                     {e.city || e.country ? (
                       <span>{[e.city, e.country].filter(Boolean).join(', ')}</span>

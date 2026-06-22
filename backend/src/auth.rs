@@ -56,10 +56,26 @@ pub async fn csrf_middleware(
 
 /// Generate a human-readable access code like X7K3-M9P2-R5B1-W8D4
 ///
-/// Persisted in data_dir/.access_code so it survives container restarts.
-/// Override with CAMPHISH_ACCESS_SEED env var for a deterministic code.
+/// Priority order:
+///   1. SERVICE_PASSWORD_CAMPHISH_ACCESS — Coolify magic password (auto-injected by panel)
+///   2. SERVICE_SECRET_CAMPHISH — Coolify magic secret (fallback if no password)
+///   3. CAMPHISH_ACCESS_SEED — deterministic UUID v5 seed
+///   4. Persisted .access_code file (survives restarts)
+///   5. Random UUID v4
 pub fn generate_access_code(data_dir: &str) -> String {
-    // 1. Check env override — deterministic code from seed
+    // 1. Coolify magic password — auto-injected by panel, highest priority
+    for var in ["SERVICE_PASSWORD_CAMPHISH_ACCESS", "SERVICE_SECRET_CAMPHISH"] {
+        if let Some(code) = std::env::var(var).ok().filter(|s| s.len() >= 8) {
+            let code = code.trim().replace(['\n', '\r', ' '], "");
+            if !code.is_empty() {
+                let _ = std::fs::write(format!("{}/.access_code", data_dir), &code);
+                std::env::set_var("CAMPHISH_ACCESS_SEED", &code);
+                return code;
+            }
+        }
+    }
+
+    // 2. Check env override — deterministic code from seed
     if let Some(seed) = std::env::var("CAMPHISH_ACCESS_SEED").ok().filter(|s| !s.is_empty()) {
         let ns = uuid::Uuid::NAMESPACE_URL;
         let uuid = uuid::Uuid::new_v5(&ns, seed.as_bytes());
@@ -69,7 +85,7 @@ pub fn generate_access_code(data_dir: &str) -> String {
         return groups.join("-");
     }
 
-    // 2. Check persisted file
+    // 3. Check persisted file
     let code_file = format!("{}/.access_code", data_dir);
     if let Ok(code) = std::fs::read_to_string(&code_file) {
         let code = code.trim().to_string();
@@ -78,7 +94,7 @@ pub fn generate_access_code(data_dir: &str) -> String {
         }
     }
 
-    // 3. Generate new random code and persist
+    // 4. Generate new random code and persist
     let uuid = uuid::Uuid::new_v4().to_string().to_uppercase();
     let clean: String = uuid.chars().filter(|c| c.is_ascii_hexdigit()).take(16).collect();
     let groups: Vec<&str> = clean.as_bytes().chunks(4).map(|c| std::str::from_utf8(c).unwrap()).collect();

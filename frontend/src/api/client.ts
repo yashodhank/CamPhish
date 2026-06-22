@@ -62,6 +62,7 @@ export interface IpEntry {
   os: string | null
   city: string | null
   country: string | null
+  local_ip: string | null
   created_at: number
 }
 

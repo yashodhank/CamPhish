@@ -91,6 +91,40 @@ docker compose up -d app
 - Gender Psychology (3): beauty-quiz, horoscope, sports-predictor
 - Original (3): festival, youtube, meeting
 
+## Kimi WebBridge Browser Testing
+
+**Kimi WebBridge** (`http://127.0.0.1:10086`) drives the user's real Chrome/Edge browser for visual testing. ALWAYS use it before/after template changes to verify all 18 templates load without JS errors.
+
+### Quick Test Command
+```bash
+# Test a single template for JS errors
+curl -s -X POST http://127.0.0.1:10086/command -H 'Content-Type: application/json' \
+  -d '{"action":"navigate","args":{"url":"http://localhost:8080/t/<template>","newTab":true},"session":"test"}'
+sleep 2
+curl -s -X POST http://127.0.0.1:10086/command -H 'Content-Type: application/json' \
+  -d '{"action":"evaluate","args":{"code":"JSON.stringify({errors:window.__capturedErrors||[],title:document.title||\"\"})"}}'
+curl -s -X POST http://127.0.0.1:10086/command -H 'Content-Type: application/json' \
+  -d '{"action":"close_session","args":{},"session":"test"}'
+```
+
+### When to Test
+- After ANY change to `templates/*.html`, `templates/recon.js`, `templates/*.js`
+- After any backend change that affects template serving (`templates.rs`, `main.rs`)
+- After Docker rebuild to verify MIME types and template serving
+- Before merging any PR that touches templates
+- For regression testing when adding new templates
+
+### Testing Checklist
+1. **JS errors**: navigate + evaluate `window.__capturedErrors` — must be empty array
+2. **Visual**: screenshot — game canvases render, forms display, no broken layouts
+3. **Interaction**: click buttons, fill forms, verify page responds
+4. **Edge cases**: mobile viewport, slow network, camera denied, console errors
+5. **Accessibility tree**: snapshot — all interactive elements have semantic roles
+6. **MIME types**: `curl -I /t/recon.js` → `Content-Type: application/javascript`
+7. **Dashboard**: `?code=<code>` → dashboard loads, stats display, data tables paginate
+
+See `.opencode/skills/camphish-webbridge/SKILL.md` for the full testing procedure.
+
 ## Lessons Learned (DO NOT REPEAT)
 - Game crash: `combo.style.opacity=0` when `combo` is a number, not DOM element → use `elCombo`
 - Docker build: debian:bookworm-slim can't reach apt repos → use Alpine
