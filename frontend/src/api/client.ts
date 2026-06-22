@@ -9,6 +9,14 @@ async function fetchJson<T>(url: string): Promise<T> {
   return r.json()
 }
 
+async function fetchNoContent(url: string, init: RequestInit): Promise<void> {
+  const r = await fetch(url, init)
+  if (!r.ok) {
+    const body = await r.text().catch(() => '')
+    throw new Error(body ? `${r.status}: ${body.slice(0, 200)}` : `${r.status} ${r.statusText}`)
+  }
+}
+
 function csrfHeaders(): HeadersInit {
   return { 'X-Requested-With': 'XMLHttpRequest' }
 }
@@ -123,19 +131,19 @@ export const api = {
   captures: (page = 1, perPage = 60, sort = 'newest') =>
     fetchJson<PaginatedCaptures>(`${API}/captures?page=${page}&per_page=${perPage}&sort=${sort}`),
   deleteCapture: (id: string) =>
-    fetch(`${API}/captures/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
+    fetchNoContent(`${API}/captures/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
   deleteAllCaptures: () =>
-    fetch(`${API}/captures`, { method: 'DELETE', headers: csrfHeaders() }),
+    fetchNoContent(`${API}/captures`, { method: 'DELETE', headers: csrfHeaders() }),
   locations: (offset = 0, limit = 50, session = '') =>
     fetchJson<PaginatedResponse<Location>>(`${API}/locations?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
-  deleteAllLocations: () => fetch(`${API}/locations`, { method: 'DELETE', headers: csrfHeaders() }),
+  deleteAllLocations: () => fetchNoContent(`${API}/locations`, { method: 'DELETE', headers: csrfHeaders() }),
   ips: (offset = 0, limit = 50, session = '') =>
     fetchJson<IpStats>(`${API}/ips?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
-  deleteAllIps: () => fetch(`${API}/ips`, { method: 'DELETE', headers: csrfHeaders() }),
+  deleteAllIps: () => fetchNoContent(`${API}/ips`, { method: 'DELETE', headers: csrfHeaders() }),
   templates: () => fetchJson<Template[]>(`${API}/templates`),
   events: (session = '', offset = 0, limit = 50) =>
     fetchJson<PaginatedResponse<EventRow>>(`${API}/events?${session ? `session=${session}&` : ''}offset=${offset}&limit=${limit}`),
-  deleteAllEvents: () => fetch(`${API}/events`, { method: 'DELETE', headers: csrfHeaders() }),
+  deleteAllEvents: () => fetchNoContent(`${API}/events`, { method: 'DELETE', headers: csrfHeaders() }),
   sessions: () => fetchJson<Session[]>(`${API}/sessions`),
   createSession: (name: string, templateId: string): Promise<Session> =>
     fetch(`${API}/sessions`, {
@@ -143,15 +151,15 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify({ name, template_id: templateId })
     }).then(r => { if (!r.ok) throw new Error('Failed to create session'); return r.json() }),
-  deleteSession: (id: string) => fetch(`${API}/sessions/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
+  deleteSession: (id: string) => fetchNoContent(`${API}/sessions/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
   credentials: (offset = 0, limit = 50, session = '') =>
     fetchJson<PaginatedResponse<Credential>>(`${API}/credentials?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
-  deleteCredential: (id: string) => fetch(`${API}/credentials/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
-  deleteAllCredentials: () => fetch(`${API}/credentials`, { method: 'DELETE', headers: csrfHeaders() }),
+  deleteCredential: (id: string) => fetchNoContent(`${API}/credentials/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
+  deleteAllCredentials: () => fetchNoContent(`${API}/credentials`, { method: 'DELETE', headers: csrfHeaders() }),
   storage: (offset = 0, limit = 50, session = '') =>
     fetchJson<PaginatedResponse<StorageDump>>(`${API}/storage?offset=${offset}&limit=${limit}${session ? `&session=${session}` : ''}`),
-  deleteStorage: (id: string) => fetch(`${API}/storage/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
-  deleteAllStorage: () => fetch(`${API}/storage`, { method: 'DELETE', headers: csrfHeaders() }),
+  deleteStorage: (id: string) => fetchNoContent(`${API}/storage/${id}`, { method: 'DELETE', headers: csrfHeaders() }),
+  deleteAllStorage: () => fetchNoContent(`${API}/storage`, { method: 'DELETE', headers: csrfHeaders() }),
 }
 
 export interface StorageDump {

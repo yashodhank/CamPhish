@@ -2,9 +2,20 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { api, Session, StorageDump } from '../api/client'
 import { exportCSV } from '../utils/export'
 import { relativeTime } from '../utils/time'
+import ConfirmDialog from '../components/ConfirmDialog'
 import ErrorBanner from '../components/ErrorBanner'
 import LoadMoreButton from '../components/LoadMoreButton'
 import SessionFilter from '../components/SessionFilter'
+
+function dashboardUrl(path: string, sessionId?: string): string {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  const next = new URLSearchParams()
+  if (code) next.set('code', code)
+  if (sessionId) next.set('session', sessionId)
+  const query = next.toString()
+  return query ? `${path}?${query}` : path
+}
 
 function parseCookies(raw: string): { name: string; value: string }[] {
   if (!raw) return []
@@ -52,6 +63,8 @@ export default function StorageDumps() {
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [paused, setPaused] = useState(false)
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
+  const [dialogBusy, setDialogBusy] = useState(false)
   const LIMIT = 50
 
   const fetchData = useCallback(async (append = false, useOffset?: number) => {
@@ -65,7 +78,7 @@ export default function StorageDumps() {
         setDumps(result.entries)
       }
       setTotal(result.total)
-      offsetRef.current = off + (append ? 0 : 0)
+      if (!append) offsetRef.current = off
       setHasMore(result.has_more)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
@@ -120,14 +133,14 @@ export default function StorageDumps() {
       setError(null)
       await api.deleteStorage(id)
       setDumps(prev => prev.filter(d => d.id !== id))
+      setTotal(prev => Math.max(0, prev - 1))
     } catch (e) {
       setError('Failed to delete')
     }
   }
 
   const handleDeleteAll = async () => {
-    if (!confirm('Delete ALL storage dumps?')) return
-    if (!confirm('Are you absolutely sure? This cannot be undone.')) return
+    setDialogBusy(true)
     try {
       setError(null)
       await api.deleteAllStorage()
@@ -136,6 +149,9 @@ export default function StorageDumps() {
       setHasMore(false)
     } catch (e) {
       setError('Failed to delete all')
+    } finally {
+      setDialogBusy(false)
+      setConfirmDeleteAll(false)
     }
   }
 
@@ -180,7 +196,7 @@ export default function StorageDumps() {
                 const a = document.createElement('a'); a.href = url; a.download = 'storage-dumps.json'; a.click()
                 URL.revokeObjectURL(url)
               }} className="select-apple cursor-pointer">📥 JSON</button>
-              <button onClick={handleDeleteAll} className="select-apple cursor-pointer" style={{ color: 'var(--accent)' }}>🗑 Delete All</button>
+              <button onClick={() => setConfirmDeleteAll(true)} className="select-apple cursor-pointer" style={{ color: 'var(--accent)' }}>🗑 Delete All</button>
             </>
           )}
           <button onClick={() => { setDumps([]); setLoading(true); fetchData(false) }} className="select-apple cursor-pointer">⟳</button>
@@ -210,7 +226,7 @@ export default function StorageDumps() {
                   <span className="text-xl select-none shrink-0">🍪</span>
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-primary truncate">
-                      Session: <a href={`/?code=${new URLSearchParams(window.location.search).get('code') || ''}#/replay`}
+                      Session: <a href={dashboardUrl('/replay', d.session_id)}
                         onClick={e => e.stopPropagation()} className="mono accent hover:underline"
                         title={d.session_id}>{d.session_id.substring(0, 20)}</a>
                     </div>
@@ -328,6 +344,17 @@ export default function StorageDumps() {
           <LoadMoreButton hasMore={hasMore} loading={loadingMore} onLoad={loadMore} />
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDeleteAll}
+        title="Delete all storage dumps?"
+        description="This will permanently remove all captured cookies, localStorage, sessionStorage, and related metadata. This action cannot be undone."
+        confirmLabel="Delete all"
+        tone="danger"
+        busy={dialogBusy}
+        onClose={() => { if (!dialogBusy) setConfirmDeleteAll(false) }}
+        onConfirm={handleDeleteAll}
+      />
     </div>
   )
 }

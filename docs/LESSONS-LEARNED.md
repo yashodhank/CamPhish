@@ -100,3 +100,29 @@
 5. recon.js shared: all templates get same recon features
 6. Credential capture: social login templates send to /api/capture/credentials
 7. el prefix convention: prevent DOM/state variable collisions
+
+## Recent Audit Lessons
+
+### 16. SPA Static File Traversal
+- **Symptom**: Dashboard fallback handler could read files outside `frontend/dist`
+- **Root cause**: Requested paths were joined directly onto the frontend directory without canonical path checks
+- **Fix**: Canonicalize both the frontend root and requested asset path, then only serve files that stay inside the root
+- **Lesson**: Any file-serving fallback must enforce an allowlisted root after path resolution, not before.
+
+### 17. Helper JS Registered as Templates
+- **Symptom**: `/t/viral.js` and `/t/anti-detect.js` showed up in the template registry and could be served with `text/html`
+- **Root cause**: Template scanning treated every `*.html` file as an operator template, including `*.js.html` helper shims
+- **Fix**: Exclude helper JS shims from registration/listing, clean stale rows, and serve JS routes with `application/javascript`
+- **Lesson**: Shared helper assets and operator-selectable templates need separate registration rules.
+
+### 18. BrowserRouter Deep-Link Regression
+- **Symptom**: Credential/storage links to Replay or IP Logs bounced back to the dashboard root
+- **Root cause**: Links were built as `#/replay` fragments even though the app uses `BrowserRouter`
+- **Fix**: Generate real paths like `/replay?code=...&session=...` and `/ips?code=...&session=...`
+- **Lesson**: Router mode matters. Hash fragments are not a safe fallback when the app is configured for history-style routes.
+
+### 19. One-Shot Camera Flows Left Streams Running
+- **Symptom**: Browser camera indicator stayed on after face verification, QR scan, or cosmetic try-on flows ended
+- **Root cause**: Timers were cleared, but media tracks were never stopped
+- **Fix**: Call `stream.getTracks().forEach(track => track.stop())` whenever the temporary capture flow ends
+- **Lesson**: Clearing the capture loop is not enough. Temporary `getUserMedia()` flows must explicitly release tracks.

