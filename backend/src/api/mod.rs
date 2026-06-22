@@ -77,6 +77,7 @@ pub struct IpRow {
     os: Option<String>,
     city: Option<String>,
     country: Option<String>,
+    local_ip: Option<String>,
     created_at: i64,
 }
 
@@ -307,13 +308,16 @@ pub async fn list_ips(
 ) -> Result<Json<IpStats>, StatusCode> {
     let limit = q.limit.unwrap_or(500).min(5000);
     let offset = q.offset.unwrap_or(0);
-    let rows: Vec<(String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> =
+    let rows: Vec<(String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)> =
         sqlx::query_as(
-            "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, created_at FROM ip_logs ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            "SELECT id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at FROM ip_logs ORDER BY created_at DESC LIMIT ? OFFSET ?"
         ).bind(limit).bind(offset).fetch_all(&state.pool).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let entries: Vec<IpRow> = rows.into_iter().map(|(id, session_id, ip_address, user_agent, device, browser, os, city, country, created_at)| {
-        IpRow { id, session_id, ip_address, user_agent, device, browser, os, city, country, created_at }
+    let entries: Vec<IpRow> = rows.into_iter().map(|(id, session_id, ip_address, user_agent, device, browser, os, city, country, geo_data, created_at)| {
+        let local_ip = geo_data.as_ref()
+            .and_then(|g| serde_json::from_str::<serde_json::Value>(g).ok())
+            .and_then(|v| v.get("client_ip").and_then(|c| c.as_str().map(|s| s.to_string())));
+        IpRow { id, session_id, ip_address, user_agent, device, browser, os, city, country, local_ip, created_at }
     }).collect();
 
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_logs")
