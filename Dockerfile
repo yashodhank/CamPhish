@@ -16,7 +16,7 @@ COPY backend/ ./
 RUN cargo build --release && ls -lh target/release/camphish
 
 FROM alpine:3.20
-ARG VERSION=2.1.1
+ARG VERSION=1.0.1
 LABEL org.opencontainers.image.title="CamPhish"
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.description="CamPhish v2 — Rust + React red team camera capture tool"
